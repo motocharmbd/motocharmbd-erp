@@ -1,10 +1,20 @@
+"use client";
+
+import { useState } from "react";
+import ItemModal from "../components/ItemModal";
+
 export default function ItemsPage() {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Items Master</h1>
 
-        <button className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg">
+        <button
+          onClick={() => setOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg"
+        >
           + New Item
         </button>
       </div>
@@ -30,6 +40,11 @@ export default function ItemsPage() {
           </tbody>
         </table>
       </div>
+
+      <ItemModal
+        open={open}
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }
