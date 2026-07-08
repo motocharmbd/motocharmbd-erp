@@ -1,6 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
 export default function PurchasePage() {
+  const [products, setProducts] = useState<any[]>([]);
+
+  async function loadProducts() {
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .order("product_name");
+
+    setProducts(data || []);
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center">
@@ -15,14 +33,13 @@ export default function PurchasePage() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
 
           <select className="border rounded-lg p-3">
-            <option>Select Item</option>
-            <option>Ring</option>
-            <option>Hook</option>
-            <option>Fabric</option>
-            <option>Sticker</option>
-            <option>Paper</option>
-            <option>Ink</option>
-            <option>Other</option>
+            <option>Select Product</option>
+
+            {products.map((product) => (
+              <option key={product.id}>
+                {product.product_name}
+              </option>
+            ))}
           </select>
 
           <input
@@ -53,9 +70,7 @@ export default function PurchasePage() {
       </div>
 
       <div className="bg-white rounded-xl shadow mt-6">
-
         <table className="w-full">
-
           <thead className="bg-gray-100">
             <tr>
               <th className="p-3 text-left">Item</th>
@@ -76,9 +91,7 @@ export default function PurchasePage() {
               </td>
             </tr>
           </tbody>
-
         </table>
-
       </div>
     </div>
   );
