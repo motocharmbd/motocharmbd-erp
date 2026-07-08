@@ -1,40 +1,65 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-
 export default function LoginPage() {
-  const router = useRouter();
-
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#0b1020]">
-      <div className="bg-gray-800 p-8 rounded-xl w-[400px]">
-        <h1 className="text-3xl font-bold text-white text-center">
-          Moto Charm BD ERP
-        </h1>
+    <div
+      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat"
+      style={{
+        backgroundImage: "url('/backgrounds/img.png')",
+      }}
+    >
+      {/* Dark Overlay */}
+      <div className="absolute inset-0 bg-black/50"></div>
 
-        <p className="text-gray-400 text-center mt-2">
-          Business Management System
-        </p>
+      {/* Login Card */}
+      <div className="relative z-10 bg-white w-full max-w-md rounded-3xl shadow-2xl p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-800">
+            MotoCharm BD
+          </h1>
 
-        <input
-          type="text"
-          placeholder="Username"
-          className="w-full mt-8 p-3 rounded bg-gray-700 text-white"
-        />
+          <p className="text-gray-500 mt-2">
+            ERP Management System
+          </p>
+        </div>
 
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full mt-4 p-3 rounded bg-gray-700 text-white"
-        />
+        <form className="space-y-5">
+          <div>
+            <label className="block mb-2 text-sm font-medium">
+              Email
+            </label>
 
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded font-semibold"
-        >
-          Login
-        </button>
+            <input
+              type="email"
+              placeholder="Enter your email"
+              className="w-full border border-gray-300 rounded-xl p-3"
+            />
+          </div>
+
+          <div>
+            <label className="block mb-2 text-sm font-medium">
+              Password
+            </label>
+
+            <input
+              type="password"
+              placeholder="Enter your password"
+              className="w-full border border-gray-300 rounded-xl p-3"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold"
+          >
+            Login
+          </button>
+        </form>
+
+        <div className="mt-8 text-center text-sm text-gray-500">
+          MotoCharm BD ERP v1.0
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
