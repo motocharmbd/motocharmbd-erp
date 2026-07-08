@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function ProductsPage() {
@@ -9,6 +9,20 @@ export default function ProductsPage() {
   const [costPrice, setCostPrice] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
   const [stock, setStock] = useState("");
+  const [products, setProducts] = useState<any[]>([]);
+
+  async function loadProducts() {
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    setProducts(data || []);
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
   async function addProduct() {
     const { error } = await supabase.from("products").insert([
@@ -23,23 +37,25 @@ export default function ProductsPage() {
 
     if (error) {
       alert(error.message);
-    } else {
-      alert("✅ Product Added Successfully");
-
-      setProductName("");
-      setCategory("");
-      setCostPrice("");
-      setSellingPrice("");
-      setStock("");
+      return;
     }
+
+    alert("✅ Product Added Successfully");
+
+    setProductName("");
+    setCategory("");
+    setCostPrice("");
+    setSellingPrice("");
+    setStock("");
+
+    loadProducts();
   }
 
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-6">Products</h1>
 
-      <div className="bg-white rounded-xl shadow p-6 max-w-xl space-y-4">
-
+      <div className="bg-white rounded-xl shadow p-6 max-w-xl space-y-4 mb-8">
         <input
           placeholder="Product Name"
           value={productName}
@@ -84,7 +100,32 @@ export default function ProductsPage() {
         >
           Save Product
         </button>
+      </div>
 
+      <div className="bg-white rounded-xl shadow overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="text-left p-4">Product</th>
+              <th className="text-left p-4">Category</th>
+              <th className="text-left p-4">Cost</th>
+              <th className="text-left p-4">Selling</th>
+              <th className="text-left p-4">Stock</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {products.map((product) => (
+              <tr key={product.id} className="border-t">
+                <td className="p-4">{product.product_name}</td>
+                <td className="p-4">{product.category}</td>
+                <td className="p-4">{product.cost_price}</td>
+                <td className="p-4">{product.selling_price}</td>
+                <td className="p-4">{product.stock}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
