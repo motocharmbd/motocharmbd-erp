@@ -11,11 +11,11 @@ export default function DashboardLayout({
 
         <nav className="space-y-3">
           <a href="/dashboard" className="block hover:text-blue-400">🏠 Dashboard</a>
-          <a href="/products" className="block hover:text-blue-400">📦 Products</a>
-          <a href="/orders" className="block hover:text-blue-400">🛒 Orders</a>
-          <a href="/costing" className="block hover:text-blue-400">💰 Costing</a>
-          <a href="/expenses" className="block hover:text-blue-400">💸 Expenses</a>
-          <a href="/settings" className="block hover:text-blue-400">⚙️ Settings</a>
+<a href="/products" className="block hover:text-blue-400">📦 Products</a>
+<a href="/orders" className="block hover:text-blue-400">🛒 Orders</a>
+<a href="/purchase" className="block hover:text-blue-400">📥 Purchase</a>
+<a href="/expenses" className="block hover:text-blue-400">💸 Expenses</a>
+<a href="/settings" className="block hover:text-blue-400">⚙️ Settings</a>
         </nav>
       </aside>
 
