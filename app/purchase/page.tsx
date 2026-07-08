@@ -47,12 +47,60 @@ export default function PurchasePage() {
     setPrice("");
   }
 
+  async function savePurchase() {
+    if (purchaseItems.length === 0) {
+      alert("No Purchase Added");
+      return;
+    }
+
+    for (const item of purchaseItems) {
+      const product = products.find(
+        (p) => p.product_name === item.product_name
+      );
+
+      if (!product) continue;
+
+      const { error } = await supabase
+        .from("purchases")
+        .insert([
+          {
+            product_id: product.id,
+            product_name: item.product_name,
+            qty: item.qty,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            total: item.total,
+          },
+        ]);
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      await supabase
+        .from("products")
+        .update({
+          stock: (product.stock || 0) + item.qty,
+        })
+        .eq("id", product.id);
+    }
+
+    alert("✅ Purchase Saved Successfully");
+
+    setPurchaseItems([]);
+    loadProducts();
+  }
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Purchase Book</h1>
 
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg">
+        <button
+          onClick={savePurchase}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+        >
           Save Today's Purchase
         </button>
       </div>
