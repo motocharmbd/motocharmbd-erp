@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function OrdersPage() {
   const [products, setProducts] = useState<any[]>([]);
+
   const [customerName, setCustomerName] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
   const [qty, setQty] = useState("");
@@ -15,15 +16,10 @@ export default function OrdersPage() {
   }, []);
 
   async function loadProducts() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("products")
       .select("*")
       .order("product_name");
-
-    if (error) {
-      console.log(error);
-      return;
-    }
 
     setProducts(data || []);
   }
@@ -39,7 +35,51 @@ export default function OrdersPage() {
       return;
     }
 
-    alert("Order Ready");
+    const product = products.find(
+      (p) => p.product_name === selectedProduct
+    );
+
+    if (!product) {
+      alert("Product not found");
+      return;
+    }
+
+    const quantity = Number(qty);
+    const sellPrice = Number(sellingPrice);
+
+    const totalSellingPrice =
+      quantity * sellPrice;
+
+    const profit =
+      totalSellingPrice -
+      quantity * Number(product.cost_price);
+
+    const { error } = await supabase
+      .from("orders")
+      .insert([
+        {
+          customer_name: customerName,
+          product_id: product.id,
+          product_name: product.product_name,
+          qty: quantity,
+          selling_price: sellPrice,
+          total: totalSellingPrice,
+          profit: profit,
+          status: "Pending",
+        },
+      ]);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert("Order Saved Successfully");
+
+    setCustomerName("");
+    setSelectedProduct("");
+    setQty("");
+    setSellingPrice("");
   }
 
   return (
@@ -50,7 +90,6 @@ export default function OrdersPage() {
 
       <div className="bg-white rounded-xl shadow p-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-
           <input
             type="text"
             placeholder="Customer Name"
@@ -104,11 +143,10 @@ export default function OrdersPage() {
 
           <button
             onClick={saveOrder}
-            className="bg-green-600 text-white rounded-lg"
+            className="bg-green-600 text-white rounded-lg px-4 py-3 hover:bg-green-700"
           >
             Save Order
           </button>
-
         </div>
       </div>
     </div>
