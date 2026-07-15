@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 export default function DashboardPage() {
   const [productCount, setProductCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
+  const [purchaseCost, setPurchaseCost] = useState(0);
+  const [profit, setProfit] = useState(0);
 
   async function loadDashboard() {
     const { count: products } = await supabase
@@ -22,8 +24,32 @@ export default function DashboardPage() {
         head: true,
       });
 
+    const { data: productData } = await supabase
+      .from("products")
+      .select("stock,cost_price");
+
+    let totalCost = 0;
+
+    productData?.forEach((item) => {
+      totalCost +=
+        (Number(item.stock) || 0) *
+        (Number(item.cost_price) || 0);
+    });
+
+    const { data: orderData } = await supabase
+      .from("orders")
+      .select("profit");
+
+    let totalProfit = 0;
+
+    orderData?.forEach((item) => {
+      totalProfit += Number(item.profit) || 0;
+    });
+
     setProductCount(products || 0);
     setOrderCount(orders || 0);
+    setPurchaseCost(totalCost);
+    setProfit(totalProfit);
   }
 
   useEffect(() => {
@@ -68,7 +94,6 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold">
             Good Evening, Admin 👋
           </h1>
-
           <p className="mt-2 text-gray-500">
             Here's your business overview today
           </p>
@@ -96,7 +121,9 @@ export default function DashboardPage() {
 
         <div className="rounded-2xl bg-green-500 p-6 text-white shadow-lg">
           <h2 className="text-lg">Purchase Cost</h2>
-          <p className="mt-2 text-3xl font-bold">৳0</p>
+          <p className="mt-2 text-3xl font-bold">
+            ৳{purchaseCost.toLocaleString()}
+          </p>
         </div>
 
         <div className="rounded-2xl bg-purple-500 p-6 text-white shadow-lg">
@@ -108,7 +135,9 @@ export default function DashboardPage() {
 
         <div className="rounded-2xl bg-orange-500 p-6 text-white shadow-lg">
           <h2 className="text-lg">Profit</h2>
-          <p className="mt-2 text-3xl font-bold">৳0</p>
+          <p className="mt-2 text-3xl font-bold">
+            ৳{profit.toLocaleString()}
+          </p>
         </div>
       </div>
     </div>

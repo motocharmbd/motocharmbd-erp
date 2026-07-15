@@ -56,11 +56,47 @@ export default function ProductsPage() {
     loadProducts();
   }, []);
 
+  const totalStock = products.reduce(
+    (sum, item) => sum + (Number(item.stock) || 0),
+    0
+  );
+
+  const totalCost = products.reduce(
+    (sum, item) =>
+      sum +
+      (Number(item.stock) || 0) *
+        (Number(item.cost_price) || 0),
+    0
+  );
+
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-6">
         Products
       </h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-blue-500 text-white p-5 rounded-xl shadow">
+          <h3>Total Products</h3>
+          <p className="text-3xl font-bold">
+            {products.length}
+          </p>
+        </div>
+
+        <div className="bg-green-500 text-white p-5 rounded-xl shadow">
+          <h3>Total Cost</h3>
+          <p className="text-3xl font-bold">
+            ৳{totalCost.toLocaleString()}
+          </p>
+        </div>
+
+        <div className="bg-purple-500 text-white p-5 rounded-xl shadow">
+          <h3>Total Stock</h3>
+          <p className="text-3xl font-bold">
+            {totalStock}
+          </p>
+        </div>
+      </div>
 
       <div className="bg-white p-6 rounded-2xl shadow-md mb-6">
         <h2 className="text-xl font-semibold mb-4">
@@ -138,9 +174,9 @@ export default function ProductsPage() {
             {products.map((item) => (
               <tr key={item.id} className="border-b">
                 <td className="p-3">{item.product_name}</td>
-<td className="p-3">{item.size}</td>
-                <td className="p-3">{item.cost_price}</td>
-                <td className="p-3">{item.selling_price}</td>
+                <td className="p-3">{item.size}</td>
+                <td className="p-3">৳{item.cost_price}</td>
+                <td className="p-3">৳{item.selling_price}</td>
                 <td className="p-3">{item.stock}</td>
               </tr>
             ))}
