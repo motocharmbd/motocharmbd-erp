@@ -25,37 +25,37 @@ export default function OrderHistoryPage() {
         Order History
       </h1>
 
-      <div className="bg-white rounded-xl shadow">
+      <div className="bg-white rounded-xl shadow overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-100">
             <tr>
-              <th className="p-3 text-left">
-                Customer
-              </th>
-              <th className="p-3 text-left">
-                Product
-              </th>
-              <th className="p-3 text-left">
-                Qty
-              </th>
-              <th className="p-3 text-left">
-                Price
-              </th>
-              <th className="p-3 text-left">
-                Total
-              </th>
+              <th className="p-3 text-left">Date</th>
+              <th className="p-3 text-left">Customer</th>
+              <th className="p-3 text-left">Phone</th>
+              <th className="p-3 text-left">Size</th>
+              <th className="p-3 text-left">Qty</th>
+              <th className="p-3 text-left">Amount</th>
+              <th className="p-3 text-left">Profit</th>
             </tr>
           </thead>
 
           <tbody>
             {orders.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} className="border-b">
+                <td className="p-3">
+                  {item.order_date}
+                </td>
+
                 <td className="p-3">
                   {item.customer_name}
                 </td>
 
                 <td className="p-3">
-                  {item.name}
+                  {item.phone}
+                </td>
+
+                <td className="p-3">
+                  {item.size}
                 </td>
 
                 <td className="p-3">
@@ -63,11 +63,11 @@ export default function OrderHistoryPage() {
                 </td>
 
                 <td className="p-3">
-                  {item.selling_price}
+                  ৳{item.total_amount}
                 </td>
 
-                <td className="p-3">
-                  {item.total}
+                <td className="p-3 font-semibold text-green-600">
+                  ৳{item.profit}
                 </td>
               </tr>
             ))}
