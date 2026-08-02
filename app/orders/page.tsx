@@ -1,71 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function OrdersPage() {
-  const [products, setProducts] = useState<any[]>([]);
-
   const [customerName, setCustomerName] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [orderDate, setOrderDate] = useState("");
+
+  const [size, setSize] = useState("");
   const [qty, setQty] = useState("");
-  const [sellingPrice, setSellingPrice] = useState("");
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  async function loadProducts() {
-    const { data } = await supabase
-      .from("products")
-      .select("*")
-      .order("product_name");
-
-    setProducts(data || []);
-  }
+  const [totalAmount, setTotalAmount] = useState("");
+  const [deliveryCharge, setDeliveryCharge] = useState("");
+  const [boostCost, setBoostCost] = useState("");
 
   async function saveOrder() {
     if (
       !customerName ||
-      !selectedProduct ||
+      !phone ||
+      !size ||
       !qty ||
-      !sellingPrice
+      !totalAmount
     ) {
-      alert("Fill all fields");
-      return;
-    }
-
-    const product = products.find(
-      (p) => p.product_name === selectedProduct
-    );
-
-    if (!product) {
-      alert("Product not found");
+      alert("Fill all required fields");
       return;
     }
 
     const quantity = Number(qty);
-    const sellPrice = Number(sellingPrice);
 
-    const totalSellingPrice =
-      quantity * sellPrice;
+    const productCost =
+      size === "11 Inch"
+        ? quantity * 150
+        : quantity * 180;
+
+    const delivery = Number(deliveryCharge) || 0;
+    const boost = Number(boostCost) || 0;
+
+    const totalCost =
+      productCost + delivery + boost;
 
     const profit =
-      totalSellingPrice -
-      quantity * Number(product.cost_price);
+      Number(totalAmount) - totalCost;
 
     const { error } = await supabase
       .from("orders")
       .insert([
         {
           customer_name: customerName,
-          product_id: product.id,
-          product_name: product.product_name,
+          phone,
+          address,
+          order_date: orderDate,
+          size,
           qty: quantity,
-          selling_price: sellPrice,
-          total: totalSellingPrice,
-          profit: profit,
-          status: "Pending",
+          total_amount: Number(totalAmount),
+
+          product_cost: productCost,
+          delivery_charge: delivery,
+          boost_cost: boost,
+          total_cost: totalCost,
+          profit,
         },
       ]);
 
@@ -77,9 +71,14 @@ export default function OrdersPage() {
     alert("Order Saved Successfully");
 
     setCustomerName("");
-    setSelectedProduct("");
+    setPhone("");
+    setAddress("");
+    setOrderDate("");
+    setSize("");
     setQty("");
-    setSellingPrice("");
+    setTotalAmount("");
+    setDeliveryCharge("");
+    setBoostCost("");
   }
 
   return (
@@ -89,7 +88,8 @@ export default function OrdersPage() {
       </h1>
 
       <div className="bg-white rounded-xl shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
           <input
             type="text"
             placeholder="Customer Name"
@@ -100,25 +100,53 @@ export default function OrdersPage() {
             className="border rounded-lg p-3"
           />
 
-          <select
-            value={selectedProduct}
+          <input
+            type="text"
+            placeholder="Phone"
+            value={phone}
             onChange={(e) =>
-              setSelectedProduct(e.target.value)
+              setPhone(e.target.value)
+            }
+            className="border rounded-lg p-3"
+          />
+
+          <input
+            type="text"
+            placeholder="Address"
+            value={address}
+            onChange={(e) =>
+              setAddress(e.target.value)
+            }
+            className="border rounded-lg p-3"
+          />
+
+          <input
+            type="date"
+            value={orderDate}
+            onChange={(e) =>
+              setOrderDate(e.target.value)
+            }
+            className="border rounded-lg p-3"
+          />
+
+          <select
+            value={size}
+            onChange={(e) =>
+              setSize(e.target.value)
             }
             className="border rounded-lg p-3"
           >
             <option value="">
-              Select Product
+              Select Size
             </option>
 
-            {products.map((product) => (
-              <option
-                key={product.id}
-                value={product.product_name}
-              >
-                {product.product_name}
-              </option>
-            ))}
+            <option value="11 Inch">
+              11 Inch
+            </option>
+
+            <option value="15 Inch">
+              15 Inch
+            </option>
           </select>
 
           <input
@@ -133,21 +161,41 @@ export default function OrdersPage() {
 
           <input
             type="number"
-            placeholder="Selling Price"
-            value={sellingPrice}
+            placeholder="Total Amount"
+            value={totalAmount}
             onChange={(e) =>
-              setSellingPrice(e.target.value)
+              setTotalAmount(e.target.value)
+            }
+            className="border rounded-lg p-3"
+          />
+<input
+            type="number"
+            placeholder="Delivery Charge"
+            value={deliveryCharge}
+            onChange={(e) =>
+              setDeliveryCharge(e.target.value)
             }
             className="border rounded-lg p-3"
           />
 
-          <button
-            onClick={saveOrder}
-            className="bg-green-600 text-white rounded-lg px-4 py-3 hover:bg-green-700"
-          >
-            Save Order
-          </button>
+          <input
+            type="number"
+            placeholder="Boost Cost"
+            value={boostCost}
+            onChange={(e) =>
+              setBoostCost(e.target.value)
+            }
+            className="border rounded-lg p-3"
+          />
+
         </div>
+
+        <button
+          onClick={saveOrder}
+          className="mt-4 bg-green-600 text-white rounded-lg px-6 py-3 hover:bg-green-700"
+        >
+          Save Order
+        </button>
       </div>
     </div>
   );

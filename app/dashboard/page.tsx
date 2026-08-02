@@ -6,7 +6,8 @@ import { supabase } from "@/lib/supabase";
 export default function DashboardPage() {
   const [productCount, setProductCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
-  const [purchaseCost, setPurchaseCost] = useState(0);
+  const [inventoryCost, setInventoryCost] = useState(0);
+  const [expenseTotal, setExpenseTotal] = useState(0);
   const [profit, setProfit] = useState(0);
 
   async function loadDashboard() {
@@ -36,6 +37,16 @@ export default function DashboardPage() {
         (Number(item.cost_price) || 0);
     });
 
+    const { data: expenseData } = await supabase
+      .from("expenses")
+      .select("amount");
+
+    let totalExpense = 0;
+
+    expenseData?.forEach((item) => {
+      totalExpense += Number(item.amount) || 0;
+    });
+
     const { data: orderData } = await supabase
       .from("orders")
       .select("profit");
@@ -48,8 +59,9 @@ export default function DashboardPage() {
 
     setProductCount(products || 0);
     setOrderCount(orders || 0);
-    setPurchaseCost(totalCost);
-    setProfit(totalProfit);
+    setInventoryCost(totalCost);
+    setExpenseTotal(totalExpense);
+    setProfit(totalProfit - totalExpense);
   }
 
   useEffect(() => {
@@ -81,9 +93,23 @@ export default function DashboardPage() {
       )
       .subscribe();
 
+    const expensesChannel = supabase
+      .channel("expenses-live")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "expenses",
+        },
+        () => loadDashboard()
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(productsChannel);
       supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(expensesChannel);
     };
   }, []);
 
@@ -94,6 +120,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold">
             Good Evening, Admin 👋
           </h1>
+
           <p className="mt-2 text-gray-500">
             Here's your business overview today
           </p>
@@ -102,6 +129,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 shadow-sm">
           <span className="relative flex h-3 w-3">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75"></span>
+
             <span className="relative inline-flex h-3 w-3 rounded-full bg-green-600"></span>
           </span>
 
@@ -114,27 +142,30 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl bg-blue-500 p-6 text-white shadow-lg">
           <h2 className="text-lg">Products</h2>
+
           <p className="mt-2 text-3xl font-bold">
             {productCount}
           </p>
         </div>
 
         <div className="rounded-2xl bg-green-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Purchase Cost</h2>
+          <h2 className="text-lg">Inventory Cost</h2>
+
           <p className="mt-2 text-3xl font-bold">
-            ৳{purchaseCost.toLocaleString()}
+            ৳{inventoryCost.toLocaleString()}
           </p>
         </div>
+<div className="rounded-2xl bg-red-500 p-6 text-white shadow-lg">
+          <h2 className="text-lg">Expenses</h2>
 
-        <div className="rounded-2xl bg-purple-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Orders</h2>
           <p className="mt-2 text-3xl font-bold">
-            {orderCount}
+            ৳{expenseTotal.toLocaleString()}
           </p>
         </div>
 
         <div className="rounded-2xl bg-orange-500 p-6 text-white shadow-lg">
           <h2 className="text-lg">Profit</h2>
+
           <p className="mt-2 text-3xl font-bold">
             ৳{profit.toLocaleString()}
           </p>
