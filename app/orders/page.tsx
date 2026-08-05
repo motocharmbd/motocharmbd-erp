@@ -7,7 +7,7 @@ export default function OrdersPage() {
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [orderDate, setOrderDate] = useState("");
+  
 
   const [size, setSize] = useState("");
   const [qty, setQty] = useState("");
@@ -50,7 +50,7 @@ export default function OrdersPage() {
           customer_name: customerName,
           phone,
           address,
-          order_date: orderDate,
+          order_date: new Date().toISOString().split("T")[0],
           size,
           qty: quantity,
           total_amount: Number(totalAmount),
@@ -73,7 +73,6 @@ export default function OrdersPage() {
     setCustomerName("");
     setPhone("");
     setAddress("");
-    setOrderDate("");
     setSize("");
     setQty("");
     setTotalAmount("");
@@ -120,14 +119,7 @@ export default function OrdersPage() {
             className="border rounded-lg p-3"
           />
 
-          <input
-            type="date"
-            value={orderDate}
-            onChange={(e) =>
-              setOrderDate(e.target.value)
-            }
-            className="border rounded-lg p-3"
-          />
+         
 
           <select
             value={size}
