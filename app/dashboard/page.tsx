@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const [inventoryCost, setInventoryCost] = useState(0);
   const [expenseTotal, setExpenseTotal] = useState(0);
   const [profit, setProfit] = useState(0);
+  const [totalSales, setTotalSales] = useState(0);
 
   async function loadDashboard() {
     const { count: products } = await supabase
@@ -49,12 +50,14 @@ export default function DashboardPage() {
 
     const { data: orderData } = await supabase
       .from("orders")
-      .select("profit");
+      .select("profit,total_amount");
 
     let totalProfit = 0;
+    let sales = 0;
 
     orderData?.forEach((item) => {
       totalProfit += Number(item.profit) || 0;
+      sales += Number(item.total_amount) || 0;
     });
 
     setProductCount(products || 0);
@@ -62,6 +65,7 @@ export default function DashboardPage() {
     setInventoryCost(totalCost);
     setExpenseTotal(totalExpense);
     setProfit(totalProfit - totalExpense);
+    setTotalSales(sales);
   }
 
   useEffect(() => {
@@ -114,7 +118,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="p-8">
+    <div className="p-6">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">
@@ -129,7 +133,6 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 shadow-sm">
           <span className="relative flex h-3 w-3">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75"></span>
-
             <span className="relative inline-flex h-3 w-3 rounded-full bg-green-600"></span>
           </span>
 
@@ -139,12 +142,28 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-2xl bg-blue-500 p-6 text-white shadow-lg">
           <h2 className="text-lg">Products</h2>
 
           <p className="mt-2 text-3xl font-bold">
             {productCount}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-indigo-500 p-6 text-white shadow-lg">
+          <h2 className="text-lg">Total Orders</h2>
+
+          <p className="mt-2 text-3xl font-bold">
+            {orderCount}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-purple-500 p-6 text-white shadow-lg">
+          <h2 className="text-lg">Total Sales</h2>
+
+          <p className="mt-2 text-3xl font-bold">
+            ৳{totalSales.toLocaleString()}
           </p>
         </div>
 
@@ -155,7 +174,8 @@ export default function DashboardPage() {
             ৳{inventoryCost.toLocaleString()}
           </p>
         </div>
-<div className="rounded-2xl bg-red-500 p-6 text-white shadow-lg">
+
+        <div className="rounded-2xl bg-red-500 p-6 text-white shadow-lg">
           <h2 className="text-lg">Expenses</h2>
 
           <p className="mt-2 text-3xl font-bold">
