@@ -18,6 +18,7 @@ type Order = {
   total_cost: number;
   profit: number;
   status: string;
+  tracking_code?: string;
 };
 
 export default function OrderHistoryPage() {
@@ -209,6 +210,36 @@ export default function OrderHistoryPage() {
     alert("Order deleted successfully");
   }
 
+  // Handle tracking code addition or secure editing
+  async function handleAddOrUpdateTracking(item: Order, isEdit = false) {
+    if (item.tracking_code && !isEdit) return;
+
+    const trackingInput = window.prompt(
+      "Enter Steadfast Tracking ID:",
+      item.tracking_code || ""
+    );
+
+    if (trackingInput === null) return;
+
+    const trimmedCode = trackingInput.trim();
+
+    const { error } = await supabase
+      .from("orders")
+      .update({ tracking_code: trimmedCode })
+      .eq("id", item.id);
+
+    if (error) {
+      alert("Failed to update tracking ID: " + error.message);
+      return;
+    }
+
+    setOrders((current) =>
+      current.map((o) =>
+        o.id === item.id ? { ...o, tracking_code: trimmedCode } : o
+      )
+    );
+  }
+
   function statusClass(status: string) {
     switch (status) {
       case "Delivered":
@@ -300,7 +331,7 @@ export default function OrderHistoryPage() {
 
       <div className="overflow-x-auto rounded-xl bg-white shadow">
 
-        <table className="w-full min-w-[1700px]">
+        <table className="w-full min-w-[1900px]">
 
           <thead className="bg-gray-100">
             <tr>
@@ -318,6 +349,7 @@ export default function OrderHistoryPage() {
               <th className="p-3 text-left">Total Cost</th>
               <th className="p-3 text-left">Profit</th>
               <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-left">Steadfast Courier</th>
               <th className="p-3 text-left">Action</th>
 
             </tr>
@@ -429,6 +461,32 @@ export default function OrderHistoryPage() {
 
                   </select>
 
+                </td>
+
+                {/* Secure Steadfast Tracking Column */}
+                <td className="p-3">
+                  {item.tracking_code ? (
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                        {item.tracking_code}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddOrUpdateTracking(item, true)}
+                        className="text-[10px] text-blue-500 hover:underline"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleAddOrUpdateTracking(item)}
+                      className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100"
+                    >
+                      + Add Tracking
+                    </button>
+                  )}
                 </td>
 
                 <td className="p-3">
