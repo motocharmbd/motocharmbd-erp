@@ -1,38 +1,35 @@
 import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const trackingCode = searchParams.get("tracking_code");
+
+  if (!trackingCode) {
+    return NextResponse.json({ error: "Tracking code is required" }, { status: 400 });
+  }
+
+  const apiKey = process.env.STEADFAST_API_KEY || "0ocu3vpovq1ymvdhtpuz0jys4uhzuga3";
+  const secretKey = process.env.STEADFAST_SECRET_KEY || "kqx3xtby4mhsenzih2qwtci6";
+
   try {
-    const body = await request.json();
+    // Steadfast status API endpoint
+    const steadfastUrl = `https://portal.packzy.com/api/v1/status_by_trackingcode/${trackingCode}`;
     
-    // Steadfast API credentials from environment variables
-    const apiKey = process.env.STEADFAST_API_KEY;
-    const secretKey = process.env.STEADFAST_SECRET_KEY;
-
-    if (!apiKey || !secretKey) {
-      return NextResponse.json(
-        { error: "Steadfast API credentials missing in environment variables" },
-        { status: 400 }
-      );
-    }
-
-    // Call Steadfast Courier API endpoint for creating order/consignment
-    const response = await fetch("https://portal.packzy.com/api/v1/create_order", {
-      method: "POST",
+    const response = await fetch(steadfastUrl, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
         "Api-Key": apiKey,
         "Secret-Key": secretKey,
+        "api-key": apiKey,
+        "secret-key": secretKey,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
       },
-      body: JSON.stringify(body),
     });
 
     const data = await response.json();
-
     return NextResponse.json(data);
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message || "Something went wrong with Steadfast API" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
