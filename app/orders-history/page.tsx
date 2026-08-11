@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -25,11 +25,13 @@ type Order = {
   tracking_code?: string;
 };
 
-export default function OrdersPage() {
+export default function OrderHistoryPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("all");
   const [selectedDate, setSelectedDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  
+  const [selectedDateOrders, setSelectedDateOrders] = useState<{ date: string; orders: Order[] } | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [saving, setSaving] = useState(false);
@@ -37,6 +39,15 @@ export default function OrdersPage() {
 
   useEffect(() => {
     loadAndAutoSyncOrders();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const searchQueryParam = params.get("search");
+    
+    if (searchQueryParam) {
+      setSearchQuery(searchQueryParam);
+    }
   }, []);
 
   async function loadAndAutoSyncOrders() {
@@ -112,15 +123,31 @@ export default function OrdersPage() {
     const matchesDate = !selectedDate || item.order_date === selectedDate;
     const matchesMonth = selectedMonth === "all" || item.order_date?.startsWith(selectedMonth);
     
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
+    const invoiceId = `mcb-${String(item.id).slice(0, 6)}`.toLowerCase();
+    const orderIdStr = String(item.id).toLowerCase();
+
     const matchesSearch =
-      !searchQuery ||
+      !query ||
+      invoiceId.includes(query) ||
+      orderIdStr.includes(query) ||
       item.customer_name?.toLowerCase().includes(query) ||
       item.phone?.toLowerCase().includes(query) ||
       item.tracking_code?.toLowerCase().includes(query);
 
     return (selectedDate ? matchesDate : matchesMonth) && matchesSearch;
   });
+
+  const groupedByDate: { [date: string]: Order[] } = {};
+  filteredOrders.forEach((item) => {
+    const d = item.order_date || "Unknown Date";
+    if (!groupedByDate[d]) {
+      groupedByDate[d] = [];
+    }
+    groupedByDate[d].push(item);
+  });
+
+  const dateList = Object.keys(groupedByDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
   const totalOrdersCount = filteredOrders.length;
   const totalSalesSum = filteredOrders.reduce((acc, item) => acc + (Number(item.total_amount) || 0), 0);
@@ -194,14 +221,19 @@ export default function OrdersPage() {
       return;
     }
 
+    const updatedItem = data as Order;
+
     setOrders((current) =>
-      current.map((item) =>
-        item.id === editingOrder.id ? (data as Order) : item
-      )
+      current.map((item) => (item.id === editingOrder.id ? updatedItem : item))
     );
 
+    if (selectedDateOrders) {
+      const updatedList = selectedDateOrders.orders.map((o) => (o.id === editingOrder.id ? updatedItem : o));
+      setSelectedDateOrders({ ...selectedDateOrders, orders: updatedList });
+    }
+
     setEditingOrder(null);
-    setViewingOrder(data as Order);
+    setViewingOrder(updatedItem);
 
     alert("Order updated successfully");
   }
@@ -218,6 +250,16 @@ export default function OrdersPage() {
     }
 
     setOrders((current) => current.filter((item) => item.id !== id));
+    
+    if (selectedDateOrders) {
+      const remaining = selectedDateOrders.orders.filter((o) => o.id !== id);
+      if (remaining.length === 0) {
+        setSelectedDateOrders(null);
+      } else {
+        setSelectedDateOrders({ ...selectedDateOrders, orders: remaining });
+      }
+    }
+
     setViewingOrder(null);
     alert("Order deleted successfully");
   }
@@ -263,9 +305,18 @@ export default function OrdersPage() {
         return;
       }
 
+      const updated = { ...item, tracking_code: trackingInput, status: fetchedStatus };
+
       setOrders((current) =>
-        current.map((o) => (o.id === item.id ? { ...o, tracking_code: trackingInput, status: fetchedStatus } : o))
+        current.map((o) => (o.id === item.id ? updated : o))
       );
+
+      if (selectedDateOrders) {
+        setSelectedDateOrders({
+          ...selectedDateOrders,
+          orders: selectedDateOrders.orders.map((o) => (o.id === item.id ? updated : o)),
+        });
+      }
 
       alert(`Success! Status from Steadfast: ${data.delivery_status || fetchedStatus}`);
     } catch (err: any) {
@@ -301,7 +352,7 @@ export default function OrdersPage() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Invoice No: MCB-${order.id}`, 196, 26, { align: "right" });
+    doc.text(`Invoice No: MCB-${String(order.id).slice(0, 6).toUpperCase()}`, 196, 26, { align: "right" });
     doc.text(`Date: ${order.order_date || "-"}`, 196, 32, { align: "right" });
 
     doc.setDrawColor(226, 232, 240);
@@ -362,7 +413,6 @@ export default function OrdersPage() {
     doc.text("Delivery Charge:", summaryX, finalY + 6);
     doc.text(`TK ${deliveryCharge.toFixed(2)}`, 196, finalY + 6, { align: "right" });
 
-    // Advanced Paid Row
     doc.setTextColor(22, 163, 74);
     doc.text("Advanced Paid:", summaryX, finalY + 12);
     doc.text(`-TK ${advanceAmount.toFixed(2)}`, 196, finalY + 12, { align: "right" });
@@ -384,7 +434,7 @@ export default function OrdersPage() {
     doc.setTextColor(148, 163, 184);
     doc.text("Thank you for shopping with Moto Charm BD!", 14, nextY);
 
-    doc.save(`Invoice_MCB_${order.id}.pdf`);
+    doc.save(`Invoice_MCB_${String(order.id).slice(0, 6)}.pdf`);
   }
 
   function statusClass(status: string) {
@@ -401,7 +451,7 @@ export default function OrdersPage() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Order History</h1>
-        <p className="mt-2 text-gray-500">View and manage all orders securely.</p>
+        <p className="mt-2 text-gray-500">View and manage orders grouped by date.</p>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -451,10 +501,10 @@ export default function OrdersPage() {
 
           <input
             type="text"
-            placeholder="Search by name, phone, tracking..."
+            placeholder="Search by Invoice, name, phone, tracking..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-72 rounded-lg border bg-white p-3 font-medium"
+            className="w-80 rounded-lg border bg-white p-3 font-medium"
           />
         </div>
       </div>
@@ -479,93 +529,162 @@ export default function OrdersPage() {
       </div>
 
       <div className="overflow-x-auto rounded-xl bg-white shadow">
-        <table className="w-full min-w-[1800px]">
+        <table className="w-full">
           <thead className="bg-gray-100">
             <tr>
-              <th className="p-3 text-left">Date</th>
-              <th className="p-3 text-left">Customer</th>
-              <th className="p-3 text-left">Phone</th>
-              <th className="p-3 text-left">Address</th>
-              <th className="p-3 text-left">Size</th>
-              <th className="p-3 text-left">Qty</th>
-              <th className="p-3 text-left">Amount</th>
-              <th className="p-3 text-left">Advanced</th>
-              <th className="p-3 text-left">Product Cost</th>
-              <th className="p-3 text-left">Delivery</th>
-              <th className="p-3 text-left">Boost</th>
-              <th className="p-3 text-left">Total Cost</th>
-              <th className="p-3 text-left">Profit</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Steadfast Courier</th>
-              <th className="p-3 text-center">Action</th>
+              <th className="p-4 text-left font-semibold text-gray-700">Date</th>
+              <th className="p-4 text-left font-semibold text-gray-700">Total</th>
+              <th className="p-4 text-right font-semibold text-gray-700">Action</th>
             </tr>
           </thead>
           <tbody>
-            {filteredOrders.map((item) => (
-              <tr key={item.id} className="border-b hover:bg-gray-50">
-                <td className="p-3">{item.order_date || "-"}</td>
-                <td className="p-3">{item.customer_name || "-"}</td>
-                <td className="p-3">{item.phone || "-"}</td>
-                <td className="p-3">{item.address || "-"}</td>
-                <td className="p-3">{item.size || "-"}</td>
-                <td className="p-3">{item.qty || 0}</td>
-                <td className="p-3">৳{Number(item.total_amount || 0).toLocaleString()}</td>
-                <td className="p-3 text-green-600 font-semibold">৳{Number(item.advance_amount || 0).toLocaleString()}</td>
-                <td className="p-3">৳{Number(item.product_cost || 0).toLocaleString()}</td>
-                <td className="p-3">৳{Number(item.delivery_charge || 0).toLocaleString()}</td>
-                <td className="p-3">৳{Number(item.boost_cost || 0).toLocaleString()}</td>
-                <td className="p-3">৳{Number(item.total_cost || 0).toLocaleString()}</td>
-                <td className="p-3 font-semibold text-green-600">৳{Number(item.profit || 0).toLocaleString()}</td>
-                <td className="p-3">
-                  <span className={`inline-block rounded-lg px-3 py-1.5 font-semibold ${statusClass(item.status || "Pending")}`}>
-                    {item.status || "Pending"}
-                  </span>
-                </td>
-                <td className="p-3">
-                  {item.tracking_code ? (
-                    <div className="flex items-center gap-2">
-                      <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
-                        {item.tracking_code}
-                      </span>
+            {dateList.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="p-6 text-center text-gray-500">No orders found.</td>
+              </tr>
+            ) : (
+              dateList.map((dateStr) => {
+                const dayOrders = groupedByDate[dateStr];
+                return (
+                  <tr key={dateStr} className="border-b hover:bg-gray-50">
+                    <td className="p-4 font-medium text-gray-800">{dateStr}</td>
+                    <td className="p-4 text-gray-600">{dayOrders.length}</td>
+                    <td className="p-4 text-right">
                       <button
                         type="button"
-                        onClick={() => handleAddOrUpdateTracking(item, true)}
-                        className="text-[10px] text-blue-500 hover:underline"
+                        onClick={() => setSelectedDateOrders({ date: dateStr, orders: dayOrders })}
+                        className="font-semibold text-teal-600 hover:underline"
                       >
-                        Edit
+                        View
                       </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleAddOrUpdateTracking(item)}
-                      className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100"
-                    >
-                      + Add Tracking
-                    </button>
-                  )}
-                </td>
-                <td className="p-3 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setViewingOrder(item)}
-                    className="inline-flex items-center justify-center rounded-lg bg-gray-100 p-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition"
-                    title="View Details"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
 
-      {viewingOrder && !editingOrder && (
+      {selectedDateOrders && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-[95vw] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b pb-3">
+              <h2 className="text-xl font-bold">Orders Details on {selectedDateOrders.date}</h2>
+              <button
+                type="button"
+                onClick={() => setSelectedDateOrders(null)}
+                className="text-2xl text-gray-500 hover:text-black font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl bg-white shadow">
+              <table className="w-full min-w-[1800px]">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-3 text-left">Invoice No</th>
+                    <th className="p-3 text-left">Date</th>
+                    <th className="p-3 text-left">Customer</th>
+                    <th className="p-3 text-left">Phone</th>
+                    <th className="p-3 text-left">Address</th>
+                    <th className="p-3 text-left">Size</th>
+                    <th className="p-3 text-left">Qty</th>
+                    <th className="p-3 text-left">Amount</th>
+                    <th className="p-3 text-left">Advanced</th>
+                    <th className="p-3 text-left">Product Cost</th>
+                    <th className="p-3 text-left">Delivery</th>
+                    <th className="p-3 text-left">Boost</th>
+                    <th className="p-3 text-left">Total Cost</th>
+                    <th className="p-3 text-left">Profit</th>
+                    <th className="p-3 text-left">Status</th>
+                    <th className="p-3 text-left">Steadfast Courier</th>
+                    <th className="p-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedDateOrders.orders.map((item) => (
+                    <tr key={item.id} className="border-b hover:bg-gray-50">
+                      <td className="p-3 font-semibold text-blue-600">
+                        MCB-{String(item.id).slice(0, 6).toUpperCase()}
+                      </td>
+                      <td className="p-3">{item.order_date || "-"}</td>
+                      <td className="p-3">{item.customer_name || "-"}</td>
+                      <td className="p-3">{item.phone || "-"}</td>
+                      <td className="p-3">{item.address || "-"}</td>
+                      <td className="p-3">{item.size || "-"}</td>
+                      <td className="p-3">{item.qty || 0}</td>
+                      <td className="p-3">৳{Number(item.total_amount || 0).toLocaleString()}</td>
+                      <td className="p-3 text-green-600 font-semibold">৳{Number(item.advance_amount || 0).toLocaleString()}</td>
+                      <td className="p-3">৳{Number(item.product_cost || 0).toLocaleString()}</td>
+                      <td className="p-3">৳{Number(item.delivery_charge || 0).toLocaleString()}</td>
+                      <td className="p-3">৳{Number(item.boost_cost || 0).toLocaleString()}</td>
+                      <td className="p-3">৳{Number(item.total_cost || 0).toLocaleString()}</td>
+                      <td className="p-3 font-semibold text-green-600">৳{Number(item.profit || 0).toLocaleString()}</td>
+                      <td className="p-3">
+                        <span className={`inline-block rounded-lg px-3 py-1.5 font-semibold ${statusClass(item.status || "Pending")}`}>
+                          {item.status || "Pending"}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        {item.tracking_code ? (
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                              {item.tracking_code}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleAddOrUpdateTracking(item, true)}
+                              className="text-[10px] text-blue-500 hover:underline"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleAddOrUpdateTracking(item)}
+                            className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100"
+                          >
+                            + Add Tracking
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setViewingOrder(item)}
+                          className="inline-flex items-center justify-center rounded-lg bg-gray-100 p-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition"
+                          title="View Details"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedDateOrders(null)}
+                className="rounded-lg border px-5 py-2 font-medium bg-gray-100 hover:bg-gray-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingOrder && !editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b pb-3">
               <h2 className="text-xl font-bold">Order Details</h2>
@@ -579,6 +698,10 @@ export default function OrdersPage() {
             </div>
 
             <div className="space-y-3 text-sm">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500">Invoice No:</span> 
+                <span className="font-medium">MCB-{String(viewingOrder.id).slice(0, 6).toUpperCase()}</span>
+              </div>
               <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Date:</span> <span className="font-medium">{viewingOrder.order_date}</span></div>
               <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Customer Name:</span> <span className="font-medium">{viewingOrder.customer_name}</span></div>
               <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Phone:</span> <span className="font-medium">{viewingOrder.phone}</span></div>
@@ -625,7 +748,7 @@ export default function OrdersPage() {
       )}
 
       {editingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-2xl font-bold">Edit Order</h2>
@@ -642,100 +765,126 @@ export default function OrdersPage() {
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Customer Name</label>
                 <input
-                  value={editingOrder.customer_name}
+                  type="text"
+                  value={editingOrder.customer_name || ""}
                   onChange={(e) => updateField("customer_name", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Phone</label>
                 <input
-                  value={editingOrder.phone}
+                  type="text"
+                  value={editingOrder.phone || ""}
                   onChange={(e) => updateField("phone", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
-              <div>
+
+              <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Address</label>
                 <input
-                  value={editingOrder.address}
+                  type="text"
+                  value={editingOrder.address || ""}
                   onChange={(e) => updateField("address", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Order Date</label>
                 <input
                   type="date"
                   value={editingOrder.order_date || ""}
                   onChange={(e) => updateField("order_date", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Size</label>
-                <select
-                  value={editingOrder.size}
-                  onChange={(e) => updateField("size", e.target.value)}
-                  className="w-full rounded-lg border p-3"
-                >
-                  <option value="11 Inch">11 Inch</option>
-                  <option value="15 Inch">15 Inch</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-gray-700">Quantity (Qty)</label>
                 <input
-                  type="number"
-                  value={editingOrder.qty}
-                  onChange={(e) => updateField("qty", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  type="text"
+                  value={editingOrder.size || ""}
+                  onChange={(e) => updateField("size", e.target.value)}
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Quantity</label>
+                <input
+                  type="number"
+                  value={editingOrder.qty || 0}
+                  onChange={(e) => updateField("qty", e.target.value)}
+                  className="w-full rounded-lg border p-3 font-medium"
+                />
+              </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Total Amount (৳)</label>
                 <input
                   type="number"
-                  value={editingOrder.total_amount}
+                  value={editingOrder.total_amount || 0}
                   onChange={(e) => updateField("total_amount", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Advanced Paid (৳)</label>
                 <input
                   type="number"
-                  value={editingOrder.advance_amount}
+                  value={editingOrder.advance_amount || 0}
                   onChange={(e) => updateField("advance_amount", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Product Cost (৳)</label>
                 <input
                   type="number"
-                  value={editingOrder.product_cost}
+                  value={editingOrder.product_cost || 0}
                   onChange={(e) => updateField("product_cost", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Delivery Charge (৳)</label>
                 <input
                   type="number"
-                  value={editingOrder.delivery_charge}
+                  value={editingOrder.delivery_charge || 0}
                   onChange={(e) => updateField("delivery_charge", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
               </div>
+
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Boost Cost (৳)</label>
                 <input
                   type="number"
-                  value={editingOrder.boost_cost}
+                  value={editingOrder.boost_cost || 0}
                   onChange={(e) => updateField("boost_cost", e.target.value)}
-                  className="w-full rounded-lg border p-3"
+                  className="w-full rounded-lg border p-3 font-medium"
                 />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Status</label>
+                <select
+                  value={editingOrder.status || "Pending"}
+                  onChange={(e) => updateField("status", e.target.value)}
+                  className="w-full rounded-lg border bg-white p-3 font-medium"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="Returned">Returned</option>
+                </select>
               </div>
             </div>
 
@@ -743,7 +892,7 @@ export default function OrdersPage() {
               <button
                 type="button"
                 onClick={() => setEditingOrder(null)}
-                className="rounded-lg border px-5 py-3"
+                className="rounded-lg border px-5 py-3 font-medium bg-gray-100 hover:bg-gray-200"
               >
                 Cancel
               </button>
@@ -753,7 +902,7 @@ export default function OrdersPage() {
                 disabled={saving}
                 className="rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Save Changes"}
+                {saving ? "Saving ..." : "Save Changes"}
               </button>
             </div>
           </div>

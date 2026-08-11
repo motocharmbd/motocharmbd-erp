@@ -2,193 +2,162 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
+import Link from "next/link";
+
+type Order = {
+  id: string | number;
+  order_date: string;
+  total_amount: number;
+  profit: number;
+  customer_name?: string;
+  phone?: string;
+  status?: string;
+};
+
+const formatInvoiceId = (id: string | number) => {
+  const strId = String(id);
+  const shortId = strId.slice(0, 6).toUpperCase();
+  return `MCB-${shortId}`;
+};
 
 export default function DashboardPage() {
-  const [productCount, setProductCount] = useState(0);
-  const [orderCount, setOrderCount] = useState(0);
-  const [inventoryCost, setInventoryCost] = useState(0);
-  const [expenseTotal, setExpenseTotal] = useState(0);
-  const [profit, setProfit] = useState(0);
-  const [totalSales, setTotalSales] = useState(0);
-
-  async function loadDashboard() {
-    const { count: products } = await supabase
-      .from("products")
-      .select("*", {
-        count: "exact",
-        head: true,
-      });
-
-    const { count: orders } = await supabase
-      .from("orders")
-      .select("*", {
-        count: "exact",
-        head: true,
-      });
-
-    const { data: productData } = await supabase
-      .from("products")
-      .select("stock,cost_price");
-
-    let totalCost = 0;
-
-    productData?.forEach((item) => {
-      totalCost +=
-        (Number(item.stock) || 0) *
-        (Number(item.cost_price) || 0);
-    });
-
-    const { data: expenseData } = await supabase
-      .from("expenses")
-      .select("amount");
-
-    let totalExpense = 0;
-
-    expenseData?.forEach((item) => {
-      totalExpense += Number(item.amount) || 0;
-    });
-
-    const { data: orderData } = await supabase
-      .from("orders")
-      .select("profit,total_amount");
-
-    let totalProfit = 0;
-    let sales = 0;
-
-    orderData?.forEach((item) => {
-      totalProfit += Number(item.profit) || 0;
-      sales += Number(item.total_amount) || 0;
-    });
-
-    setProductCount(products || 0);
-    setOrderCount(orders || 0);
-    setInventoryCost(totalCost);
-    setExpenseTotal(totalExpense);
-    setProfit(totalProfit - totalExpense);
-    setTotalSales(sales);
-  }
+  const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    loadDashboard();
-
-    const productsChannel = supabase
-      .channel("products-live")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "products",
-        },
-        () => loadDashboard()
-      )
-      .subscribe();
-
-    const ordersChannel = supabase
-      .channel("orders-live")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
-        () => loadDashboard()
-      )
-      .subscribe();
-
-    const expensesChannel = supabase
-      .channel("expenses-live")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "expenses",
-        },
-        () => loadDashboard()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(productsChannel);
-      supabase.removeChannel(ordersChannel);
-      supabase.removeChannel(expensesChannel);
-    };
+    loadOrders();
   }, []);
+
+  async function loadOrders() {
+    const { data, error } = await supabase.from("orders").select("*").order("order_date", { ascending: false });
+    if (error) {
+      console.error(error.message);
+    } else {
+      setOrders(data || []);
+    }
+  }
+
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  
+  const totalOrdersCount = safeOrders.length;
+  const totalSalesAmount = safeOrders.reduce((sum, item) => sum + (Number(item.total_amount) || 0), 0);
+  const totalProfitAmount = safeOrders.reduce((sum, item) => sum + (Number(item.profit) || 0), 0);
+  const averageOrderValue = totalOrdersCount > 0 ? (totalSalesAmount / totalOrdersCount).toFixed(2) : 0;
+
+  const chartDataMap: { [date: string]: { date: string; orders: number; sales: number; profit: number } } = {};
+
+  safeOrders.forEach((item) => {
+    const d = item.order_date || "Unknown";
+    if (!chartDataMap[d]) {
+      chartDataMap[d] = { date: d, orders: 0, sales: 0, profit: 0 };
+    }
+    chartDataMap[d].orders += 1;
+    chartDataMap[d].sales += Number(item.total_amount) || 0;
+    chartDataMap[d].profit += Number(item.profit) || 0;
+  });
+
+  const graphData = Object.values(chartDataMap).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const recentOrders = safeOrders.slice(0, 5);
 
   return (
     <div className="p-6">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
-          <h1 className="text-3xl font-bold">
-            Good Evening, Admin 👋
-          </h1>
-
-          <p className="mt-2 text-gray-500">
-            Here's your business overview today
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="mt-1 text-gray-500">Welcome back! Here is your business performance overview.</p>
         </div>
-
-        <div className="flex items-center gap-2 rounded-full bg-green-100 px-4 py-2 shadow-sm">
-          <span className="relative flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75"></span>
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-green-600"></span>
-          </span>
-
-          <span className="font-semibold text-green-700">
-            Live Sync
-          </span>
+        <div className="flex gap-3">
+          <Link href="/orders" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium shadow transition">
+            + New Order
+          </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-2xl bg-blue-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Products</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500">Total Orders</p>
+          <h3 className="text-2xl font-bold text-gray-800 mt-2">{totalOrdersCount}</h3>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500">Total Sales</p>
+          <h3 className="text-2xl font-bold text-purple-600 mt-2">৳ {totalSalesAmount}</h3>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500">Total Profit</p>
+          <h3 className="text-2xl font-bold text-green-600 mt-2">৳ {totalProfitAmount}</h3>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500">Avg. Order Value (AOV)</p>
+          <h3 className="text-2xl font-bold text-blue-600 mt-2">৳ {averageOrderValue}</h3>
+        </div>
+      </div>
 
-          <p className="mt-2 text-3xl font-bold">
-            {productCount}
-          </p>
+      <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 mb-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Performance & Trend</h2>
+          <p className="text-sm text-gray-500">Track daily orders, sales, and profit ups & downs</p>
+        </div>
+        
+        <div className="h-80 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={graphData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
+              <YAxis stroke="#94a3b8" fontSize={12} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: "#1e293b", borderRadius: "8px", color: "#fff", border: "none" }}
+                itemStyle={{ color: "#fff" }}
+              />
+              <Legend />
+              <Line type="monotone" dataKey="orders" name="Total Orders" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 7 }} />
+              <Line type="monotone" dataKey="sales" name="Sales (৳)" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="profit" name="Profit (৳)" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Recent Orders</h2>
+            <p className="text-sm text-gray-500">Latest transactions made in your system</p>
+          </div>
         </div>
 
-        <div className="rounded-2xl bg-indigo-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Total Orders</h2>
-
-          <p className="mt-2 text-3xl font-bold">
-            {orderCount}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-purple-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Total Sales</h2>
-
-          <p className="mt-2 text-3xl font-bold">
-            ৳{totalSales.toLocaleString()}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-green-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Inventory Cost</h2>
-
-          <p className="mt-2 text-3xl font-bold">
-            ৳{inventoryCost.toLocaleString()}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-red-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Expenses</h2>
-
-          <p className="mt-2 text-3xl font-bold">
-            ৳{expenseTotal.toLocaleString()}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-orange-500 p-6 text-white shadow-lg">
-          <h2 className="text-lg">Profit</h2>
-
-          <p className="mt-2 text-3xl font-bold">
-            ৳{profit.toLocaleString()}
-          </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-100 text-sm text-gray-500 bg-gray-50/50">
+                <th className="p-3 font-semibold rounded-l-lg">Invoice ID</th>
+                <th className="p-3 font-semibold">Date</th>
+                <th className="p-3 font-semibold">Amount (৳)</th>
+                <th className="p-3 font-semibold rounded-r-lg">Profit (৳)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 text-sm">
+              {recentOrders.length > 0 ? (
+                recentOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-gray-50 transition">
+                    <td className="p-3 font-semibold text-blue-600">
+                      <Link href={`/orders-history?search=${order.phone || ""}`} className="hover:underline flex items-center gap-1">
+                        {formatInvoiceId(order.id)}
+                      </Link>
+                    </td>
+                    <td className="p-3 text-gray-500">{order.order_date || "N/A"}</td>
+                    <td className="p-3 font-semibold text-purple-600">৳ {order.total_amount}</td>
+                    <td className="p-3 font-semibold text-green-600">৳ {order.profit}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="p-6 text-center text-gray-400">
+                    No orders found yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
