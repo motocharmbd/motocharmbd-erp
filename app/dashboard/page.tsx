@@ -140,7 +140,10 @@ export default function DashboardPage() {
                 recentOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50 transition">
                     <td className="p-3 font-semibold text-blue-600">
-                      <Link href={`/orders-history?search=${order.phone || ""}`} className="hover:underline flex items-center gap-1">
+                      <Link
+  href={`/orders/${order.id}`}
+  className="hover:underline flex items-center gap-1"
+>
                         {formatInvoiceId(order.id)}
                       </Link>
                     </td>
