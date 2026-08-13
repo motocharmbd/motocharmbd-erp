@@ -1,129 +1,206 @@
 "use client";
 
-import { useState } from "react";
-import { ShieldCheck, UserPlus, Lock, Mail, CheckCircle2, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+
+interface Moderator {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
 
 export default function SettingsPage() {
-  // 🔑 এখানে আপনার নিজের ইচ্ছেমতো অ্যাডমিন পাসওয়ার্ড সেট করে নিন
-  const MY_ADMIN_PASSWORD = "my_secure_password_123"; 
-
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [moderatorEmail, setModeratorEmail] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [role, setRole] = useState("Viewer");
+  const [loading, setLoading] = useState(false);
+  const [moderators, setModerators] = useState<Moderator[]>([]);
 
-  const handleAddModerator = async (e: React.FormEvent) => {
+  const fetchModerators = async () => {
+    const { data, error } = await supabase
+      .from("moderators")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setModerators(data);
+    }
+  };
+
+  useEffect(() => {
+    fetchModerators();
+  }, []);
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setErrorMessage("");
-    setSuccessMessage("");
+    if (!email || !password) return;
 
-    setTimeout(() => {
-      if (password !== MY_ADMIN_PASSWORD) {
-        setErrorMessage("ভুল অ্যাডমিন পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।");
-        setIsLoading(false);
-        return;
-      }
+    setLoading(true);
+    const { error } = await supabase
+      .from("moderators")
+      .insert([{ email, password, role }]);
 
-      if (!moderatorEmail) {
-        setErrorMessage("দয়া করে মডারেটরের ইমেল দিন।");
-        setIsLoading(false);
-        return;
-      }
+    setLoading(false);
 
-      // এখানে সফলভাবে মডারেটর ডেটাবেজে যোগ করার লজিক হবে
-      setSuccessMessage(`সফলভাবে ${moderatorEmail} কে মডারেটর হিসেবে যুক্ত করা হয়েছে!`);
-      setModeratorEmail("");
+    if (error) {
+      alert("Error: " + error.message);
+    } else {
+      setEmail("");
       setPassword("");
-      setIsLoading(false);
-    }, 500);
+      setRole("Viewer");
+      fetchModerators();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to revoke access?")) return;
+
+    const { error } = await supabase
+      .from("moderators")
+      .delete()
+      .eq("id", id);
+
+    if (!error) {
+      fetchModerators();
+    }
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-        
-        {/* Header */}
-        <div className="bg-gradient-to-r from-gray-900 to-slate-800 p-6 text-white flex items-center gap-3">
-          <div className="p-3 bg-white/10 rounded-xl backdrop-blur-md">
-            <ShieldCheck className="w-6 h-6 text-blue-400" />
-          </div>
+    <div className="max-w-6xl mx-auto space-y-8 pb-10">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+          System Settings & Access Control
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Manage live credentials and restrict moderator permissions.
+        </p>
+      </div>
+
+      {/* Create ID Card with Access Type */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <h2 className="text-base font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">
+          Create New Moderator ID & Access Type
+        </h2>
+
+        <form onSubmit={handleCreateAccount} className="grid grid-cols-1 md:grid-cols-4 gap-5 items-end">
           <div>
-            <h1 className="text-xl font-bold tracking-wide">Access Control & Security</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Manage administrative privileges and moderators</p>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+              Username / Email
+            </label>
+            <input
+              type="text"
+              placeholder="Enter username or email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-800 px-4 py-3 rounded-xl focus:outline-none focus:border-blue-600 focus:bg-white text-sm transition-all"
+              required
+            />
           </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-800 px-4 py-3 rounded-xl focus:outline-none focus:border-blue-600 focus:bg-white text-sm transition-all"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+              Access Type / Role
+            </label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-800 px-4 py-3 rounded-xl focus:outline-none focus:border-blue-600 focus:bg-white text-sm transition-all cursor-pointer"
+            >
+              <option value="Viewer">Viewer (Read Only)</option>
+              <option value="Editor">Editor (Can Manage Data)</option>
+              <option value="Full Admin">Full Access (Admin)</option>
+            </select>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-all text-sm shadow-md shadow-blue-600/20 disabled:opacity-50"
+            >
+              {loading ? "Saving..." : "Create Login ID"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Personnel List Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="text-base font-bold text-slate-800">
+            Authorized Personnel List
+          </h2>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleAddModerator} className="p-8 space-y-5">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-              Moderator Email Address
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <Mail className="w-4 h-4" />
-              </div>
-              <input
-                type="email"
-                value={moderatorEmail}
-                onChange={(e) => setModeratorEmail(e.target.value)}
-                placeholder="moderator@gmail.com"
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-              Admin Master Password
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <Lock className="v-4 h-4" />
-              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="আপনার অ্যাডমিন পাসওয়ার্ড দিন"
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                required
-              />
-            </div>
-          </div>
-
-          {errorMessage && (
-            <div className="flex items-center gap-2 p-3.5 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-semibold">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="flex items-center gap-2 p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-semibold">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all disabled:opacity-50"
-          >
-            {isLoading ? (
-              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-            ) : (
-              <>
-                <UserPlus className="w-4 h-4" />
-                <span>Authorize Moderator</span>
-              </>
-            )}
-          </button>
-        </form>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 text-[11px] uppercase tracking-wider text-slate-400 bg-slate-50/50">
+                <th className="py-3.5 px-6 font-bold">Username / Email</th>
+                <th className="py-3.5 px-6 font-bold">Access Type</th>
+                <th className="py-3.5 px-6 font-bold">Created Date</th>
+                <th className="py-3.5 px-6 font-bold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-sm">
+              {moderators.map((mod) => (
+                <tr key={mod.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="py-4 px-6 font-semibold text-slate-800">
+                    {mod.email}
+                  </td>
+                  <td className="py-4 px-6">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
+                      mod.role === 'Full Admin' 
+                        ? 'bg-purple-50 text-purple-600 border border-purple-100' 
+                        : mod.role === 'Editor'
+                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                        : 'bg-amber-50 text-amber-600 border border-amber-100'
+                    }`}>
+                      {mod.role || 'Viewer'}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6 text-slate-500 text-xs">
+                    {new Date(mod.created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </td>
+                  <td className="py-4 px-6 text-right">
+                    <button
+                      onClick={() => handleDelete(mod.id)}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium text-xs px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                      Revoke
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {moderators.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-400 text-sm">
+                    No authorized accounts found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

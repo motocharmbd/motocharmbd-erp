@@ -15,18 +15,6 @@ export default function DashboardLayout({
             🏠 Dashboard
           </a>
 
-          <a href="/products" className="block hover:text-blue-400">
-            📦 Products
-          </a>
-
-          <a href="/purchase" className="block hover:text-blue-400">
-            📥 Purchase
-          </a>
-
-          <a href="/purchase-history" className="block hover:text-blue-400">
-            📋 Purchase History
-          </a>
-
           <a href="/orders" className="block hover:text-blue-400">
             🛒 Orders
           </a>
@@ -40,8 +28,8 @@ export default function DashboardLayout({
           </a>
 
           <a href="/fraud-check" className="block hover:text-blue-400">
-  🛡️ Fraud Check
-</a>
+            🛡️ Fraud Check
+          </a>
 
           <a href="/settings" className="block hover:text-blue-400">
             ⚙️ Settings
