@@ -39,6 +39,10 @@ export default function DashboardLayout({
             💸 Expenses
           </a>
 
+          <a href="/fraud-check" className="block hover:text-blue-400">
+  🛡️ Fraud Check
+</a>
+
           <a href="/settings" className="block hover:text-blue-400">
             ⚙️ Settings
           </a>

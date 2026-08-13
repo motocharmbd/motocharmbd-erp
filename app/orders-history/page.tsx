@@ -529,43 +529,138 @@ export default function OrderHistoryPage() {
       </div>
 
       <div className="overflow-x-auto rounded-xl bg-white shadow">
-        <table className="w-full">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="p-4 text-left font-semibold text-gray-700">Date</th>
-              <th className="p-4 text-left font-semibold text-gray-700">Total</th>
-              <th className="p-4 text-right font-semibold text-gray-700">Action</th>
+  {searchQuery.trim() !== "" || selectedDate !== "" ? (
+    <table className="w-full min-w-[1800px]">
+      <thead className="bg-gray-100">
+        <tr>
+          <th className="p-3 text-left">Invoice No</th>
+          <th className="p-3 text-left">Date</th>
+          <th className="p-3 text-left">Customer</th>
+          <th className="p-3 text-left">Phone</th>
+          <th className="p-3 text-left">Address</th>
+          <th className="p-3 text-left">Size</th>
+          <th className="p-3 text-left">Qty</th>
+          <th className="p-3 text-left">Amount</th>
+          <th className="p-3 text-left">Advanced</th>
+          <th className="p-3 text-left">Product Cost</th>
+          <th className="p-3 text-left">Delivery</th>
+          <th className="p-3 text-left">Boost</th>
+          <th className="p-3 text-left">Total Cost</th>
+          <th className="p-3 text-left">Profit</th>
+          <th className="p-3 text-left">Status</th>
+          <th className="p-3 text-left">Steadfast Courier</th>
+          <th className="p-3 text-center">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filteredOrders.length === 0 ? (
+          <tr>
+            <td colSpan={17} className="p-6 text-center text-gray-500">No matching orders found.</td>
+          </tr>
+        ) : (
+          filteredOrders.map((item) => (
+            <tr key={item.id} className="border-b hover:bg-gray-50">
+              <td className="p-3 font-semibold text-blue-600">
+                MCB-{String(item.id).slice(0, 6).toUpperCase()}
+              </td>
+              <td className="p-3">{item.order_date || "-"}</td>
+              <td className="p-3">{item.customer_name || "-"}</td>
+              <td className="p-3">{item.phone || "-"}</td>
+              <td className="p-3">{item.address || "-"}</td>
+              <td className="p-3">{item.size || "-"}</td>
+              <td className="p-3">{item.qty || 0}</td>
+              <td className="p-3">৳{Number(item.total_amount || 0).toLocaleString()}</td>
+              <td className="p-3 text-green-600 font-semibold">৳{Number(item.advance_amount || 0).toLocaleString()}</td>
+              <td className="p-3">৳{Number(item.product_cost || 0).toLocaleString()}</td>
+              <td className="p-3">৳{Number(item.delivery_charge || 0).toLocaleString()}</td>
+              <td className="p-3">৳{Number(item.boost_cost || 0).toLocaleString()}</td>
+              <td className="p-3">৳{Number(item.total_cost || 0).toLocaleString()}</td>
+              <td className="p-3 font-semibold text-green-600">৳{Number(item.profit || 0).toLocaleString()}</td>
+              <td className="p-3">
+                <span className={`inline-block rounded-lg px-3 py-1.5 font-semibold ${statusClass(item.status || "Pending")}`}>
+                  {item.status || "Pending"}
+                </span>
+              </td>
+              <td className="p-3">
+                {item.tracking_code ? (
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+                      {item.tracking_code}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleAddOrUpdateTracking(item, true)}
+                      className="text-[10px] text-blue-500 hover:underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleAddOrUpdateTracking(item)}
+                    className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100"
+                  >
+                    + Add Tracking
+                  </button>
+                )}
+              </td>
+              <td className="p-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => setViewingOrder(item)}
+                  className="inline-flex items-center justify-center rounded-lg bg-gray-100 p-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition"
+                  title="View Details"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {dateList.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="p-6 text-center text-gray-500">No orders found.</td>
+          ))
+        )}
+      </tbody>
+    </table>
+  ) : (
+    <table className="w-full">
+      <thead className="bg-gray-100">
+        <tr>
+          <th className="p-4 text-left font-semibold text-gray-700">Date</th>
+          <th className="p-4 text-left font-semibold text-gray-700">Total</th>
+          <th className="p-4 text-right font-semibold text-gray-700">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {dateList.length === 0 ? (
+          <tr>
+            <td colSpan={3} className="p-6 text-center text-gray-500">No orders found.</td>
+          </tr>
+        ) : (
+          dateList.map((dateStr) => {
+            const dayOrders = groupedByDate[dateStr];
+            return (
+              <tr key={dateStr} className="border-b hover:bg-gray-50">
+                <td className="p-4 font-medium text-gray-800">{dateStr}</td>
+                <td className="p-4 text-gray-600">{dayOrders.length}</td>
+                <td className="p-4 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDateOrders({ date: dateStr, orders: dayOrders })}
+                    className="font-semibold text-teal-600 hover:underline"
+                  >
+                    View
+                  </button>
+                </td>
               </tr>
-            ) : (
-              dateList.map((dateStr) => {
-                const dayOrders = groupedByDate[dateStr];
-                return (
-                  <tr key={dateStr} className="border-b hover:bg-gray-50">
-                    <td className="p-4 font-medium text-gray-800">{dateStr}</td>
-                    <td className="p-4 text-gray-600">{dayOrders.length}</td>
-                    <td className="p-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDateOrders({ date: dateStr, orders: dayOrders })}
-                        className="font-semibold text-teal-600 hover:underline"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  )}
+</div>
       {selectedDateOrders && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-[95vw] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
