@@ -41,7 +41,8 @@ function withCalculatedValues(item: any): Order {
 }
 function scoreFromFraudResponse(payload: any): number {
   const direct = payload?.score ?? payload?.success_ratio ?? payload?.data?.score ?? payload?.data?.success_ratio ?? payload?.data?.data?.score ?? payload?.data?.data?.success_ratio;
-  if (typeof direct === "number" && Number.isFinite(direct)) return Math.max(0, Math.min(100, Math.round(direct)));
+  const numericDirect = Number(direct);
+  if (Number.isFinite(numericDirect)) return Math.max(0, Math.min(100, Math.round(numericDirect)));
   const root = payload?.data?.data || payload?.data || payload;
   const summary = root?.summary;
   const total = n(summary?.total_parcel);

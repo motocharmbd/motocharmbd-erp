@@ -17,8 +17,8 @@ function findSummary(value: any): any | null {
 
 function findSuccessRatio(value: any): number | null {
   if (!value || typeof value !== 'object') return null;
-  const ratio = value.success_ratio;
-  if (typeof ratio === 'number' && Number.isFinite(ratio)) return ratio;
+  const ratio = Number(value.success_ratio);
+  if (Number.isFinite(ratio)) return ratio;
   for (const child of Object.values(value)) {
     const found = findSuccessRatio(child);
     if (found !== null) return found;
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer I68ktyQueEk4GGzgiJwIHN6xLnZDRq6t6mqXqse9kw7YHfQKMfgdAVTeD9bl',
+        'Authorization': `Bearer ${process.env.BD_COURIER_BEARER_TOKEN || 'I68ktyQueEk4GGzgiJwIHN6xLnZDRq6t6mqXqse9kw7YHfQKMfgdAVTeD9bl'}`,
       },
       body: JSON.stringify({ phone: String(phoneNumber).trim() }),
       cache: 'no-store',
