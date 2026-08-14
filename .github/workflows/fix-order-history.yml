@@ -1,0 +1,67 @@
+name: Fix order history integration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch order history
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          page = Path('app/orders-history/page.tsx')
+          text = page.read_text(encoding='utf-8')
+
+          # Route Steadfast calls through our Next.js server proxy so mobile browsers
+          # do not hit CORS/auth problems and API keys stay server-side.
+          text = re.sub(
+              r'fetch\(`https://portal\\.packzy\\.com/api/v1/status_by_trackingcode/\\$\{item\.tracking_code\}`,[\s\S]*?\); const data = await response\.json\(\);',
+              'fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`, { cache: "no-store" }); const data = await response.json();',
+              text,
+              count=1,
+          )
+          text = re.sub(
+              r'fetch\(`https://portal\\.packzy\\.com/api/v1/status_by_trackingcode/\\$\{trackingInput\}`,[\s\S]*?\); const data = await response\.json\(\);',
+              'fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingInput)}`, { cache: "no-store" }); const data = await response.json();',
+              text,
+              count=1,
+          )
+
+          # Make fraud-score parsing accept numeric strings too.
+          old = '''  const direct = payload?.score ?? payload?.success_ratio ?? payload?.data?.score ?? payload?.data?.success_ratio ?? payload?.data?.data?.score ?? payload?.data?.data?.success_ratio;\n  if (typeof direct === "number" && Number.isFinite(direct)) return Math.max(0, Math.min(100, Math.round(direct)));'''
+          new = '''  const direct = payload?.score ?? payload?.success_ratio ?? payload?.data?.score ?? payload?.data?.success_ratio ?? payload?.data?.data?.score ?? payload?.data?.data?.success_ratio;\n  const numericDirect = Number(direct);\n  if (Number.isFinite(numericDirect)) return Math.max(0, Math.min(100, Math.round(numericDirect)));'''
+          text = text.replace(old, new)
+
+          page.write_text(text, encoding='utf-8')
+
+          route = Path('app/api/fraud-check/route.ts')
+          r = route.read_text(encoding='utf-8')
+          r = r.replace(
+              'const ratio = value.success_ratio;\n  if (typeof ratio === \'number\' && Number.isFinite(ratio)) return ratio;',
+              'const ratio = Number(value.success_ratio);\n  if (Number.isFinite(ratio)) return ratio;'
+          )
+          r = r.replace(
+              "'Authorization': 'Bearer I68ktyQueEk4GGzgiJwIHN6xLnZDRq6t6mqXqse9kw7YHfQKMfgdAVTeD9bl',",
+              "'Authorization': `Bearer ${process.env.BD_COURIER_BEARER_TOKEN || 'I68ktyQueEk4GGzgiJwIHN6xLnZDRq6t6mqXqse9kw7YHfQKMfgdAVTeD9bl'}`,"
+          )
+          route.write_text(r, encoding='utf-8')
+
+      - name: Remove one-time fixer
+        run: rm -f .github/workflows/fix-order-history.yml
+
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/orders-history/page.tsx app/api/fraud-check/route.ts .github/workflows/fix-order-history.yml
+          git diff --cached --quiet || git commit -m "Fix fraud score and Steadfast tracking integration"
+          git push
