@@ -1,0 +1,42 @@
+name: Fix Sakin summary final
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Order History summary
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/orders-history/page.tsx')
+          s = p.read_text()
+          old = '''<div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin Total Orders: {confirmedCount(rows, "Sakin")}
+        </div>'''
+          new = '''<div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin Total Orders: {confirmedCount(rows, "Sakin")}
+        </div>
+        <div className="rounded-lg bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700">
+          Sakin Commission: {money(commissionTotal(rows, "Sakin"))}
+        </div>'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'Sakin Commission: {money(commissionTotal(rows, "Sakin"))}' not in s:
+              raise SystemExit('Sakin summary target not found')
+          p.write_text(s)
+          PY
+      - name: Commit and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/fix-sakin-summary-final.yml
+          git add app/orders-history/page.tsx .github/workflows/fix-sakin-summary-final.yml
+          git diff --cached --quiet && exit 0
+          git commit -m 'Show Sakin total orders and commission'
+          git push
