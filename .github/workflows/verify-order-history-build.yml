@@ -14,7 +14,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Patch Sakin order count
         run: |
-          python -c 'from pathlib import Path; p=Path("app/orders-history/page.tsx"); s=p.read_text(); old="Sakin Commission: {money(commissionTotal(rows, \\"Sakin\\"))}"; new="Sakin Total Orders: {confirmedCount(rows, \\"Sakin\\")}"; assert old in s, "target not found"; p.write_text(s.replace(old,new,1))'
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/orders-history/page.tsx')
+          s = p.read_text()
+          old = 'Sakin Commission: {money(commissionTotal(rows, "Sakin"))}'
+          new = 'Sakin Total Orders: {confirmedCount(rows, "Sakin")}'
+          if old not in s:
+              raise SystemExit('target not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
       - uses: actions/setup-node@v4
         with:
           node-version: 20
