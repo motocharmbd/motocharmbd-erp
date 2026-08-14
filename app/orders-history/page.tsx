@@ -640,6 +640,7 @@ export default function OrderHistoryPage() {
 
   function OrderTable({ rows }: { rows: Order[] }) {
     return (
+      <>
       <table className="w-full min-w-[1800px]">
         <thead className="bg-gray-100">
           <tr>
@@ -668,7 +669,7 @@ export default function OrderHistoryPage() {
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={17}
+                colSpan={18}
                 className="p-6 text-center text-gray-500"
               >
                 No matching orders found.
@@ -825,6 +826,7 @@ export default function OrderHistoryPage() {
           Unassigned: {rows.length - confirmedCount(rows, "Sakin") - confirmedCount(rows, "Or")} orders
         </div>
       </div>
+      </>
     );
   }
 
