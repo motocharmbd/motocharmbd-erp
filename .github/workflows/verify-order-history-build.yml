@@ -12,16 +12,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch Sakin order count
+      - name: Fix Sakin order summary
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('app/orders-history/page.tsx')
           s = p.read_text()
-          old = 'Sakin Commission: {money(commissionTotal(rows, "Sakin"))}'
-          new = 'Sakin Total Orders: {confirmedCount(rows, "Sakin")}'
+          old = '''<div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin Total Orders: {confirmedCount(rows, "Sakin")}
+        </div>'''
+          new = '''<div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin Total Orders: {confirmedCount(rows, "Sakin")}
+        </div>
+        <div className="rounded-lg bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700">
+          Sakin Commission: {money(commissionTotal(rows, "Sakin"))}
+        </div>'''
           if old not in s:
-              raise SystemExit('target not found')
+              raise SystemExit('Sakin total order summary target not found')
           p.write_text(s.replace(old, new, 1))
           PY
       - uses: actions/setup-node@v4
@@ -30,12 +37,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Commit patch and remove one-time workflows
+      - name: Commit final patch and remove temporary workflows
         if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -f .github/workflows/verify-order-history-build.yml .github/workflows/one-time-sakin-label.yml
-          git add app/orders-history/page.tsx .github/workflows/verify-order-history-build.yml .github/workflows/one-time-sakin-label.yml
-          git commit -m "Show Sakin total order count only"
+          rm -f .github/workflows/verify-order-history-build.yml .github/workflows/one-time-sakin-label.yml .github/workflows/update-sakin-summary.yml
+          git add app/orders-history/page.tsx .github/workflows/verify-order-history-build.yml .github/workflows/one-time-sakin-label.yml .github/workflows/update-sakin-summary.yml
+          git commit -m "Show Sakin total orders and commission"
           git push
