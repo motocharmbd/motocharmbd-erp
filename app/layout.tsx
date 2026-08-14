@@ -1,4 +1,5 @@
 import "./globals.css";
+import SakinCommissionDisplay from "./components/SakinCommissionDisplay";
 
 export const metadata = {
   title: "Moto Charm BD ",
@@ -12,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <SakinCommissionDisplay />
+      </body>
     </html>
   );
 }
