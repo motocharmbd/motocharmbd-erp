@@ -17,8 +17,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Update Order History commission logic
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
           import sys
 
@@ -123,20 +123,16 @@ jobs:
 
           text = text.replace('colSpan={18}', 'colSpan={19}')
           path.write_text(text, encoding='utf-8')
-
           print('Order commission logic updated successfully.')
+          PY
 
-      - name: Commit changes
+      - name: Commit changes and remove temporary workflow
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app/orders-history/page.tsx
-          git commit -m 'Add dynamic order confirmation commission' || echo 'No changes to commit'
+          git commit -m 'Add dynamic order confirmation commission'
           git push
-
-      - name: Remove temporary workflow
-        if: success()
-        run: |
           git rm .github/workflows/update-order-commission.yml
           git commit -m 'Remove temporary commission update workflow'
           git push
