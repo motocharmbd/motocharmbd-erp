@@ -2,8 +2,7 @@ name: Add Order Export Feature
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: write
@@ -15,84 +14,77 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Add export button and CSV export logic
-        shell: python
+      - name: Patch order history
         run: |
+          python3 <<'PY'
           from pathlib import Path
 
           path = Path("app/orders-history/page.tsx")
           text = path.read_text(encoding="utf-8")
-
           marker = "// ORDER_EXPORT_FEATURE_V1"
+
           if marker in text:
               print("Order export already installed")
               raise SystemExit(0)
 
-          function_anchor = '''function money(value: unknown) {
+          anchor = '''function money(value: unknown) {
             return `৳${n(value).toLocaleString("en-BD")}`;
           }
           '''
 
-          export_function = '''function money(value: unknown) {
+          export_code = '''function money(value: unknown) {
             return `৳${n(value).toLocaleString("en-BD")}`;
           }
 
           // ORDER_EXPORT_FEATURE_V1
           function exportAllOrdersToSheet() {
             const headers = [
-              "Invoice No",
-              "Order ID",
-              "Date",
-              "Customer Name",
-              "Phone",
-              "Address",
-              "Size",
-              "Quantity",
-              "Total Amount",
-              "Advance Amount",
-              "Product Cost",
-              "Delivery Charge",
-              "Boost Cost",
-              "Total Cost",
-              "Profit",
-              "Status",
-              "Payment Status",
-              "Steadfast Tracking Code",
+              "Invoice No", "Order ID", "Date", "Customer Name", "Phone",
+              "Address", "Size", "Quantity", "Total Amount", "Advance Amount",
+              "Product Cost", "Delivery Charge", "Boost Cost", "Total Cost", "Profit",
+              "Status", "Payment Status", "Steadfast Tracking Code",
             ];
 
             const escapeCSV = (value: unknown) => {
-              const text = value === null || value === undefined ? "" : String(value);
-              return `"${text.replace(/"/g, '""')}"`;
+              const valueText = value === null || value === undefined ? "" : String(value);
+              return `"${valueText.replace(/"/g, '""')}"`;
             };
 
-            const rows = orders.map((item) => [
-              `MCB-${String(item.id).slice(0, 6).toUpperCase()}`,
-              item.id,
-              item.order_date || "",
-              item.customer_name || "",
-              item.phone || "",
-              item.address || "",
-              item.size || "",
-              n(item.qty),
-              n(item.total_amount),
-              n(item.advance_amount),
-              n(item.product_cost),
-              n(item.delivery_charge),
-              n(item.boost_cost),
-              n(item.product_cost) + n(item.delivery_charge) + n(item.boost_cost),
-              n(item.total_amount) - (n(item.product_cost) + n(item.delivery_charge) + n(item.boost_cost)),
-              item.status || "Pending",
-              item.payment_status || "Unpaid",
-              item.tracking_code || "",
-            ]);
+            const rows = orders.map((item) => {
+              const productCost = n(item.product_cost);
+              const delivery = n(item.delivery_charge);
+              const boost = n(item.boost_cost);
+              const totalAmount = n(item.total_amount);
+              const totalCost = productCost + delivery + boost;
+              const profit = totalAmount - totalCost;
+
+              return [
+                `MCB-${String(item.id).slice(0, 6).toUpperCase()}`,
+                item.id,
+                item.order_date || "",
+                item.customer_name || "",
+                item.phone || "",
+                item.address || "",
+                item.size || "",
+                n(item.qty),
+                totalAmount,
+                n(item.advance_amount),
+                productCost,
+                delivery,
+                boost,
+                totalCost,
+                profit,
+                item.status || "Pending",
+                item.payment_status || "Unpaid",
+                item.tracking_code || "",
+              ];
+            });
 
             const csv = [headers, ...rows]
               .map((row) => row.map(escapeCSV).join(","))
               .join("\\r\\n");
 
-            const blob = new Blob(["\\uFEFF" + csv], {
-              type: "text/csv;charset=utf-8;",
-            });
+            const blob = new Blob(["\\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -104,17 +96,17 @@ jobs:
           }
           '''
 
-          if function_anchor not in text:
-              raise SystemExit("Could not find money() anchor")
-          text = text.replace(function_anchor, export_function, 1)
+          if anchor not in text:
+              raise SystemExit("money() anchor not found")
+          text = text.replace(anchor, export_code, 1)
 
-          header_old = '''      <div className="mb-6">
+          old_header = '''      <div className="mb-6">
         <h1 className="text-3xl font-bold">Order History</h1>
         <p className="mt-2 text-gray-500">View and manage orders grouped by date.</p>
       </div>
 '''
 
-          header_new = '''      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          new_header = '''      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Order History</h1>
           <p className="mt-2 text-gray-500">View and manage orders grouped by date.</p>
@@ -135,12 +127,12 @@ jobs:
       </div>
 '''
 
-          if header_old not in text:
-              raise SystemExit("Could not find Order History header anchor")
-          text = text.replace(header_old, header_new, 1)
-
+          if old_header not in text:
+              raise SystemExit("Order History header anchor not found")
+          text = text.replace(old_header, new_header, 1)
           path.write_text(text, encoding="utf-8")
           print("Order export feature installed")
+          PY
 
       - name: Commit generated change
         run: |
@@ -148,7 +140,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/orders-history/page.tsx
           if git diff --cached --quiet; then
-            echo "No changes to commit"
+            echo "No generated changes"
             exit 0
           fi
           git commit -m "Add export all orders to sheet"
