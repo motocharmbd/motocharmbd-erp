@@ -1,0 +1,51 @@
+name: One-time Sakin order count patch
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Order History
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/orders-history/page.tsx')
+          s = p.read_text()
+
+          old_ui = '''<div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin Commission: {money(commissionTotal(rows, "Sakin"))}
+        </div>'''
+          new_ui = '''<div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin Total Orders: {confirmedCount(rows, "Sakin")}
+        </div>'''
+          if old_ui not in s:
+              raise SystemExit('Sakin Commission UI target not found')
+          s = s.replace(old_ui, new_ui, 1)
+
+          old_fn = '''  function commissionTotal(rows: Order[], person: string) {
+    return rows.filter(
+      (row) =>
+        confirmedByOrderId[String(row.id)] === person &&
+        String(row.status || '').toLowerCase() !== 'cancelled'
+    ).length * COMMISSION_PER_ORDER;
+  }
+
+'''
+          if old_fn in s:
+              s = s.replace(old_fn, '', 1)
+
+          p.write_text(s)
+          PY
+
+          rm -f .github/workflows/one-time-sakin-label.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/orders-history/page.tsx .github/workflows/one-time-sakin-label.yml
+          git commit -m 'Show Sakin total order count only'
+          git push
