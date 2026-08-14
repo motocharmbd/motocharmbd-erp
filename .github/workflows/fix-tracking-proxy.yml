@@ -1,0 +1,43 @@
+name: Fix tracking proxy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch browser tracking calls
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/orders-history/page.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          old1 = '''fetch(`https://portal.packzy.com/api/v1/status_by_trackingcode/${item.tracking_code}`, { headers: { "Api-Key": "0ocu3vpovq1ymvdhtpuz0jys4uhzuga3", "Secret-Key": "kqx3xtby4mhsenzih2qwtci6", Accept: "application/json" } })'''
+          new1 = '''fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`, { cache: "no-store" })'''
+          old2 = '''fetch(`https://portal.packzy.com/api/v1/status_by_trackingcode/${trackingInput}`, { headers: { "Api-Key": "0ocu3vpovq1ymvdhtpuz0jys4uhzuga3", "Secret-Key": "kqx3xtby4mhsenzih2qwtci6", Accept: "application/json" } })'''
+          new2 = '''fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingInput)}`, { cache: "no-store" })'''
+
+          if old1 not in s:
+              raise SystemExit('sync tracking call pattern not found')
+          if old2 not in s:
+              raise SystemExit('add/update tracking call pattern not found')
+          s = s.replace(old1, new1).replace(old2, new2)
+          p.write_text(s, encoding='utf-8')
+
+      - name: Remove one-time fixer
+        run: rm -f .github/workflows/fix-tracking-proxy.yml
+
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/orders-history/page.tsx .github/workflows/fix-tracking-proxy.yml
+          git diff --cached --quiet || git commit -m "Route tracking checks through server proxy"
+          git push
