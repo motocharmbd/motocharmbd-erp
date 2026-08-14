@@ -31,20 +31,38 @@ export async function POST(request: Request) {
     const { phoneNumber } = await request.json();
 
     if (!phoneNumber) {
-      return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
+      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+    }
+
+    const token = process.env.BD_COURIER_BEARER_TOKEN;
+    if (!token) {
+      console.error('BD_COURIER_BEARER_TOKEN is not configured');
+      return NextResponse.json(
+        { error: 'Fraud checker is not configured. Add BD_COURIER_BEARER_TOKEN to the deployment environment.' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      );
     }
 
     const apiResponse = await fetch('https://api.bdcourier.com/courier-check', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.BD_COURIER_BEARER_TOKEN || 'I68ktyQueEk4GGzgiJwIHN6xLnZDRq6t6mqXqse9kw7YHfQKMfgdAVTeD9bl'}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ phone: String(phoneNumber).trim() }),
       cache: 'no-store',
     });
 
-    const data = await apiResponse.json();
+    const data = await apiResponse.json().catch(() => ({}));
+
+    if (!apiResponse.ok) {
+      console.error('BD Courier API returned', apiResponse.status, data);
+      return NextResponse.json(
+        { error: 'BD Courier API authentication/request failed', upstreamStatus: apiResponse.status },
+        { status: apiResponse.status, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+
     const summary = findSummary(data);
     const ratio = findSuccessRatio(data);
     const total = toNumber(summary?.total_parcel);
@@ -56,11 +74,14 @@ export async function POST(request: Request) {
         : 0;
 
     return NextResponse.json({ ...data, score }, {
-      status: apiResponse.ok ? 200 : apiResponse.status,
+      status: 200,
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    console.error("BD Courier API Error:", error);
-    return NextResponse.json({ error: "Failed to fetch data from BD Courier", score: 0 }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
+    console.error('BD Courier API Error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch data from BD Courier', score: 0 },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    );
   }
 }
