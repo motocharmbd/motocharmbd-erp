@@ -830,7 +830,7 @@ export default function OrderHistoryPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
         <div className="text-sm font-bold text-gray-700">Order Confirmed:</div>
         <div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
-          Sakin Commission: {money(commissionTotal(rows, "Sakin"))}
+          Sakin Total Orders: {confirmedCount(rows, "Sakin")}
         </div>
       </div>
       </>
