@@ -81,10 +81,17 @@ export default function OrderHistoryPage() {
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmedByOrderId, setConfirmedByOrderId] = useState<Record<string, string>>({});
   const hasSyncedRef = useRef(false);
 
   useEffect(() => {
     loadAndAutoSyncOrders();
+    try {
+      const saved = localStorage.getItem("mcb_order_confirmed_by");
+      if (saved) setConfirmedByOrderId(JSON.parse(saved));
+    } catch (error) {
+      console.error("Failed to load order confirmation assignments", error);
+    }
   }, []);
 
   useEffect(() => {
@@ -598,6 +605,24 @@ export default function OrderHistoryPage() {
     );
   }
 
+  function setOrderConfirmedBy(orderId: number, person: string) {
+    setConfirmedByOrderId((current) => {
+      const next = { ...current };
+      if (person) next[String(orderId)] = person;
+      else delete next[String(orderId)];
+      try {
+        localStorage.setItem("mcb_order_confirmed_by", JSON.stringify(next));
+      } catch (error) {
+        console.error("Failed to save order confirmation assignment", error);
+      }
+      return next;
+    });
+  }
+
+  function confirmedCount(rows: Order[], person: string) {
+    return rows.filter((row) => confirmedByOrderId[String(row.id)] === person).length;
+  }
+
   function statusClass(status: string) {
     switch (status) {
       case "Delivered":
@@ -633,6 +658,7 @@ export default function OrderHistoryPage() {
             <th className="p-3 text-left">Total Cost</th>
             <th className="p-3 text-left">Profit</th>
             <th className="p-3 text-left">Status</th>
+            <th className="p-3 text-left">Order Confirmed By</th>
             <th className="p-3 text-left">Steadfast Courier</th>
             <th className="p-3 text-center">Action</th>
           </tr>
@@ -713,6 +739,18 @@ export default function OrderHistoryPage() {
                     </span>
                   </td>
                   <td className="p-3">
+                    <select
+                      value={confirmedByOrderId[String(item.id)] || ""}
+                      onChange={(e) => setOrderConfirmedBy(item.id, e.target.value)}
+                      className="min-w-[135px] rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-500"
+                      title="Select who confirmed this order"
+                    >
+                      <option value="">Select Name</option>
+                      <option value="Sakin">Sakin</option>
+                      <option value="Or">Or</option>
+                    </select>
+                  </td>
+                  <td className="p-3">
                     {item.tracking_code ? (
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
@@ -774,6 +812,19 @@ export default function OrderHistoryPage() {
           )}
         </tbody>
       </table>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
+        <div className="text-sm font-bold text-gray-700">Order Confirmed:</div>
+        <div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
+          Sakin: {confirmedCount(rows, "Sakin")} orders
+        </div>
+        <div className="rounded-lg bg-purple-100 px-4 py-2 text-sm font-bold text-purple-700">
+          Or: {confirmedCount(rows, "Or")} orders
+        </div>
+        <div className="rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-700">
+          Unassigned: {rows.length - confirmedCount(rows, "Sakin") - confirmedCount(rows, "Or")} orders
+        </div>
+      </div>
     );
   }
 
