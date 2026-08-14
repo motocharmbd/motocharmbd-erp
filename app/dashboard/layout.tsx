@@ -1,3 +1,5 @@
+import SakinCommissionDisplay from "@/app/components/SakinCommissionDisplay";
+
 export default function DashboardLayout({
   children,
 }: {
@@ -39,6 +41,7 @@ export default function DashboardLayout({
 
       <main className="flex-1 bg-gray-100 p-8">
         {children}
+        <SakinCommissionDisplay />
       </main>
     </div>
   );
