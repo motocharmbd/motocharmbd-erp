@@ -619,25 +619,22 @@ export default function OrderHistoryPage() {
     });
   }
 
-  // Commission rule: 15 TK is earned only when the assigned order is Delivered.
-  // If a Delivered order becomes Cancelled (or any non-delivered status),
-  // the commission automatically becomes 0 again.
-  const COMMISSION_PER_DELIVERED_ORDER = 15;
+  // Sakin commission rule:
+  // +15 TK immediately when an order is assigned to Sakin.
+  // -15 TK automatically when that Sakin order is Cancelled.
+  // No per-order commission amount is shown; only the total is shown below.
+  const COMMISSION_PER_ORDER = 15;
 
   function confirmedCount(rows: Order[], person: string) {
     return rows.filter((row) => confirmedByOrderId[String(row.id)] === person).length;
   }
 
-  function deliveredCount(rows: Order[], person: string) {
+  function commissionTotal(rows: Order[], person: string) {
     return rows.filter(
       (row) =>
         confirmedByOrderId[String(row.id)] === person &&
-        String(row.status || '').toLowerCase() === 'delivered'
-    ).length;
-  }
-
-  function commissionTotal(rows: Order[], person: string) {
-    return deliveredCount(rows, person) * COMMISSION_PER_DELIVERED_ORDER;
+        String(row.status || '').toLowerCase() !== 'cancelled'
+    ).length * COMMISSION_PER_ORDER;
   }
 
   function statusClass(status: string) {
@@ -677,7 +674,6 @@ export default function OrderHistoryPage() {
             <th className="p-3 text-left">Profit</th>
             <th className="p-3 text-left">Status</th>
             <th className="p-3 text-left">Order Confirmed By</th>
-            <th className="p-3 text-left">Commission</th>
             <th className="p-3 text-left">Steadfast Courier</th>
             <th className="p-3 text-center">Action</th>
           </tr>
@@ -766,13 +762,7 @@ export default function OrderHistoryPage() {
                     >
                       <option value="">Select Name</option>
                       <option value="Sakin">Sakin</option>
-                      <option value="Or">Or</option>
                     </select>
-                  </td>
-                  <td className="p-3 font-semibold">
-                    {String(item.status || '').toLowerCase() === 'delivered' && confirmedByOrderId[String(item.id)]
-                      ? <span className="text-green-600">{money(COMMISSION_PER_DELIVERED_ORDER)}</span>
-                      : <span className="text-gray-400">{money(0)}</span>}
                   </td>
                   <td className="p-3">
                     {item.tracking_code ? (
@@ -840,13 +830,7 @@ export default function OrderHistoryPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
         <div className="text-sm font-bold text-gray-700">Order Confirmed:</div>
         <div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
-          Sakin: {confirmedCount(rows, "Sakin")} orders · Delivered: {deliveredCount(rows, "Sakin")} · Commission: {money(commissionTotal(rows, "Sakin"))}
-        </div>
-        <div className="rounded-lg bg-purple-100 px-4 py-2 text-sm font-bold text-purple-700">
-          Or: {confirmedCount(rows, "Or")} orders · Delivered: {deliveredCount(rows, "Or")} · Commission: {money(commissionTotal(rows, "Or"))}
-        </div>
-        <div className="rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-700">
-          Unassigned: {rows.length - confirmedCount(rows, "Sakin") - confirmedCount(rows, "Or")} orders
+          Sakin Commission: {money(commissionTotal(rows, "Sakin"))}
         </div>
       </div>
       </>
