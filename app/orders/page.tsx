@@ -172,6 +172,24 @@ export default function OrdersPage() {
     courierData?.reports ||
     [];
 
+  // Success score: successful deliveries / total parcels.
+  // Only the percentage is shown beside the phone number.
+  const totalParcels = Number(summary?.total_parcel) || 0;
+  const successParcels = Number(summary?.success_parcel) || 0;
+  const successRate =
+    totalParcels > 0
+      ? Math.round((successParcels / totalParcels) * 100)
+      : null;
+
+  const successRateClass =
+    successRate === null
+      ? ""
+      : successRate >= 80
+        ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+        : successRate >= 50
+          ? "text-amber-600 bg-amber-50 border-amber-200"
+          : "text-red-600 bg-red-50 border-red-200";
+
   // -----------------------------
   // SAVE ORDER
   // -----------------------------
@@ -335,14 +353,32 @@ export default function OrdersPage() {
                     11 digits = auto check
                   </span>
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="017XXXXXXXX"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold tracking-wide text-slate-800 outline-none transition placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="017XXXXXXXX"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className={`h-11 w-full rounded-xl border bg-white px-3.5 pr-16 text-sm font-semibold tracking-wide text-slate-800 outline-none transition placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 ${
+                      successRate !== null
+                        ? successRate >= 80
+                          ? "border-emerald-300"
+                          : successRate >= 50
+                            ? "border-amber-300"
+                            : "border-red-300"
+                        : "border-slate-200"
+                    }`}
+                  />
+                  {successRate !== null && !fraudLoading && !fraudError && (
+                    <span
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-xs font-black ${successRateClass}`}
+                      title="Courier success score"
+                    >
+                      {successRate}%
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* ADDRESS */}
