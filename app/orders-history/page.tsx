@@ -94,7 +94,7 @@ export default function OrderHistoryPage() {
     for (let i = 0; i < updated.length; i++) {
       const item = updated[i]; if (!item.tracking_code || item.status === "Delivered" || item.status === "Cancelled") continue;
       try {
-        const response = await fetch(`https://portal.packzy.com/api/v1/status_by_trackingcode/${item.tracking_code}`, { headers: { "Api-Key": "0ocu3vpovq1ymvdhtpuz0jys4uhzuga3", "Secret-Key": "kqx3xtby4mhsenzih2qwtci6", Accept: "application/json" } });
+        const response = await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`, { cache: "no-store" });
         const data = await response.json(); if (!data?.delivery_status) continue;
         const lower = String(data.delivery_status).toLowerCase(); let status = item.status;
         if (lower.includes("delivered")) status = "Delivered"; else if (lower.includes("cancel")) status = "Cancelled"; else if (lower.includes("return")) status = "Returned"; else if (lower.includes("hold") || lower.includes("processing") || lower.includes("in_review")) status = "Processing";
@@ -138,7 +138,7 @@ export default function OrderHistoryPage() {
   async function handleAddOrUpdateTracking(item: Order, isEdit = false) {
     let trackingInput = item.tracking_code; if (!trackingInput || isEdit) { const input = window.prompt("Enter Steadfast Tracking ID:", item.tracking_code || ""); if (input === null) return; trackingInput = input.trim(); if (!trackingInput) return; }
     try {
-      const response = await fetch(`https://portal.packzy.com/api/v1/status_by_trackingcode/${trackingInput}`, { headers: { "Api-Key": "0ocu3vpovq1ymvdhtpuz0jys4uhzuga3", "Secret-Key": "kqx3xtby4mhsenzih2qwtci6", Accept: "application/json" } }); const data = await response.json(); let status = item.status || "Pending"; const lower = String(data?.delivery_status || "").toLowerCase();
+      const response = await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingInput)}`, { cache: "no-store" }); const data = await response.json(); let status = item.status || "Pending"; const lower = String(data?.delivery_status || "").toLowerCase();
       if (lower.includes("delivered")) status = "Delivered"; else if (lower.includes("cancel")) status = "Cancelled"; else if (lower.includes("return")) status = "Returned"; else if (lower.includes("hold") || lower.includes("processing") || lower.includes("in_review")) status = "Processing";
       const { error } = await supabase.from("orders").update({ tracking_code: trackingInput, status }).eq("id", item.id); if (error) { alert("Failed to update database: " + error.message); return; }
       const updated = withCalculatedValues({ ...item, tracking_code: trackingInput, status }); setOrders(c => c.map(o => o.id === item.id ? updated : o)); setSelectedDateOrders(c => c ? { ...c, orders: c.orders.map(o => o.id === item.id ? updated : o) } : null); alert(`Success! Status from Steadfast: ${data?.delivery_status || status}`);
