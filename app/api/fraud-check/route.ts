@@ -15,6 +15,17 @@ function findSummary(value: any): any | null {
   return null;
 }
 
+function findSuccessRatio(value: any): number | null {
+  if (!value || typeof value !== 'object') return null;
+  const ratio = value.success_ratio;
+  if (typeof ratio === 'number' && Number.isFinite(ratio)) return ratio;
+  for (const child of Object.values(value)) {
+    const found = findSuccessRatio(child);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const { phoneNumber } = await request.json();
@@ -29,19 +40,27 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer I68ktyQueEk4GGzgiJwIHN6xLnZDRq6t6mqXqse9kw7YHfQKMfgdAVTeD9bl',
       },
-      body: JSON.stringify({ phone: phoneNumber }),
+      body: JSON.stringify({ phone: String(phoneNumber).trim() }),
       cache: 'no-store',
     });
 
     const data = await apiResponse.json();
     const summary = findSummary(data);
+    const ratio = findSuccessRatio(data);
     const total = toNumber(summary?.total_parcel);
     const successful = toNumber(summary?.success_parcel);
-    const score = total > 0 ? Math.max(0, Math.min(100, Math.round((successful / total) * 100))) : 0;
+    const score = ratio !== null
+      ? Math.max(0, Math.min(100, Math.round(ratio)))
+      : total > 0
+        ? Math.max(0, Math.min(100, Math.round((successful / total) * 100)))
+        : 0;
 
-    return NextResponse.json({ ...data, score }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ ...data, score }, {
+      status: apiResponse.ok ? 200 : apiResponse.status,
+      headers: { 'Cache-Control': 'no-store' },
+    });
   } catch (error) {
     console.error("BD Courier API Error:", error);
-    return NextResponse.json({ error: "Failed to fetch data from BD Courier", score: 0 }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch data from BD Courier", score: 0 }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }
