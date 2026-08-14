@@ -1,1 +1,4 @@
 @import "tailwindcss";
+
+/* Order History: cancellation is handled automatically by courier status. */
+button.bg-red-50.text-red-600 { display: none !important; }
