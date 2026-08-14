@@ -619,8 +619,25 @@ export default function OrderHistoryPage() {
     });
   }
 
+  // Commission rule: 15 TK is earned only when the assigned order is Delivered.
+  // If a Delivered order becomes Cancelled (or any non-delivered status),
+  // the commission automatically becomes 0 again.
+  const COMMISSION_PER_DELIVERED_ORDER = 15;
+
   function confirmedCount(rows: Order[], person: string) {
     return rows.filter((row) => confirmedByOrderId[String(row.id)] === person).length;
+  }
+
+  function deliveredCount(rows: Order[], person: string) {
+    return rows.filter(
+      (row) =>
+        confirmedByOrderId[String(row.id)] === person &&
+        String(row.status || '').toLowerCase() === 'delivered'
+    ).length;
+  }
+
+  function commissionTotal(rows: Order[], person: string) {
+    return deliveredCount(rows, person) * COMMISSION_PER_DELIVERED_ORDER;
   }
 
   function statusClass(status: string) {
@@ -660,6 +677,7 @@ export default function OrderHistoryPage() {
             <th className="p-3 text-left">Profit</th>
             <th className="p-3 text-left">Status</th>
             <th className="p-3 text-left">Order Confirmed By</th>
+            <th className="p-3 text-left">Commission</th>
             <th className="p-3 text-left">Steadfast Courier</th>
             <th className="p-3 text-center">Action</th>
           </tr>
@@ -669,7 +687,7 @@ export default function OrderHistoryPage() {
           {rows.length === 0 ? (
             <tr>
               <td
-                colSpan={18}
+                colSpan={19}
                 className="p-6 text-center text-gray-500"
               >
                 No matching orders found.
@@ -751,6 +769,11 @@ export default function OrderHistoryPage() {
                       <option value="Or">Or</option>
                     </select>
                   </td>
+                  <td className="p-3 font-semibold">
+                    {String(item.status || '').toLowerCase() === 'delivered' && confirmedByOrderId[String(item.id)]
+                      ? <span className="text-green-600">{money(COMMISSION_PER_DELIVERED_ORDER)}</span>
+                      : <span className="text-gray-400">{money(0)}</span>}
+                  </td>
                   <td className="p-3">
                     {item.tracking_code ? (
                       <div className="flex items-center gap-2">
@@ -817,10 +840,10 @@ export default function OrderHistoryPage() {
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
         <div className="text-sm font-bold text-gray-700">Order Confirmed:</div>
         <div className="rounded-lg bg-blue-100 px-4 py-2 text-sm font-bold text-blue-700">
-          Sakin: {confirmedCount(rows, "Sakin")} orders
+          Sakin: {confirmedCount(rows, "Sakin")} orders · Delivered: {deliveredCount(rows, "Sakin")} · Commission: {money(commissionTotal(rows, "Sakin"))}
         </div>
         <div className="rounded-lg bg-purple-100 px-4 py-2 text-sm font-bold text-purple-700">
-          Or: {confirmedCount(rows, "Or")} orders
+          Or: {confirmedCount(rows, "Or")} orders · Delivered: {deliveredCount(rows, "Or")} · Commission: {money(commissionTotal(rows, "Or"))}
         </div>
         <div className="rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-700">
           Unassigned: {rows.length - confirmedCount(rows, "Sakin") - confirmedCount(rows, "Or")} orders
