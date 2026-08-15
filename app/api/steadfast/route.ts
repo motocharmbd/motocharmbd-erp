@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 
-const STATUS_VALUES = [
+const FINAL_STATUS_VALUES = ["delivered", "partial_delivered", "cancelled"];
+const PROCESSING_STATUS_VALUES = [
   "pending",
   "delivered_approval_pending",
   "partial_delivered_approval_pending",
   "cancelled_approval_pending",
   "unknown_approval_pending",
-  "delivered",
-  "partial_delivered",
-  "cancelled",
   "hold",
   "in_review",
   "unknown",
@@ -32,7 +30,7 @@ function findDeliveryStatus(payload: any): string {
 
   for (const value of candidates) {
     const status = normalizeStatus(value);
-    if (status && (STATUS_VALUES.includes(status) || status.includes("delivered") || status.includes("cancel") || status.includes("return") || status.includes("hold") || status.includes("processing") || status.includes("review"))) {
+    if (status && (FINAL_STATUS_VALUES.includes(status) || PROCESSING_STATUS_VALUES.includes(status))) {
       return status;
     }
   }
@@ -85,10 +83,7 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json({
-      ...payload,
-      delivery_status: deliveryStatus,
-    });
+    return NextResponse.json({ ...payload, delivery_status: deliveryStatus });
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message || "Steadfast API request failed", delivery_status: "" },
