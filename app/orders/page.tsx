@@ -25,6 +25,7 @@ export default function OrdersPage() {
   const [productPrice, setProductPrice] = useState("");
   const [productCostInput, setProductCostInput] = useState("");
   const [giftBox, setGiftBox] = useState(false);
+  const [confirmedBy, setConfirmedBy] = useState("");
   const [deliveryCharge, setDeliveryCharge] = useState("60");
   const [boostCost, setBoostCost] = useState("0");
   const [advancedPaid, setAdvancedPaid] = useState("0");
@@ -110,7 +111,7 @@ export default function OrdersPage() {
     const cleanPhone = phone.replace(/\D/g, "");
     if (cleanPhone.length !== 11) { alert("Enter a valid 11 digit phone number"); return; }
 
-    const { error } = await supabase.from("orders").insert([{
+    const { data: savedOrder, error } = await supabase.from("orders").insert([{
       customer_name: customerName,
       phone: cleanPhone,
       address,
@@ -124,10 +125,23 @@ export default function OrdersPage() {
       total_cost: totalCost,
       profit,
       status: "Pending",
-    }]);
+    }]).select("id").single();
     if (error) { alert(error.message); return; }
+
+    // Keep the existing Order History assignment system in sync.
+    if (savedOrder?.id && confirmedBy) {
+      try {
+        const saved = localStorage.getItem("mcb_order_confirmed_by");
+        const assignments = saved ? JSON.parse(saved) : {};
+        assignments[String(savedOrder.id)] = confirmedBy;
+        localStorage.setItem("mcb_order_confirmed_by", JSON.stringify(assignments));
+      } catch (error) {
+        console.error("Failed to save confirmation assignment", error);
+      }
+    }
+
     alert("Order Saved Successfully");
-    setCustomerName(""); setPhone(""); setAddress(""); setOrderDate(getTodayDhaka()); setSize("11 Inch"); setQty("1"); setProductPrice(""); setProductCostInput(""); setGiftBox(false); setDeliveryCharge("60"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
+    setCustomerName(""); setPhone(""); setAddress(""); setOrderDate(getTodayDhaka()); setSize("11 Inch"); setQty("1"); setProductPrice(""); setProductCostInput(""); setGiftBox(false); setConfirmedBy(""); setDeliveryCharge("60"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
   }
 
   return (
@@ -148,6 +162,7 @@ export default function OrdersPage() {
               <div><label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-600"><span>Phone Number</span><span className="font-medium normal-case tracking-normal text-slate-400">11 digits = auto check</span></label><div className="relative"><input type="text" inputMode="numeric" placeholder="017XXXXXXXX" value={phone} onChange={e=>setPhone(e.target.value)} className={`h-11 w-full rounded-xl border bg-white px-3.5 pr-16 text-sm font-semibold tracking-wide text-slate-800 outline-none transition placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 ${successRate!==null?(successRate>=80?"border-emerald-300":successRate>=50?"border-amber-300":"border-red-300"):"border-slate-200"}`}/>{successRate!==null&&!fraudLoading&&!fraudError&&<span className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-xs font-black ${successRateClass}`}>{successRate}%</span>}</div></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Delivery Address</label><input type="text" placeholder="Enter delivery address" value={address} onChange={e=>setAddress(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Order Date</label><input type="date" value={orderDate} onChange={e=>setOrderDate(e.target.value)} className="h-11 w-full rounded-xl border border-blue-200 bg-blue-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Order Confirmed By</label><select value={confirmedBy} onChange={e=>setConfirmedBy(e.target.value)} className="h-11 w-full rounded-xl border border-blue-200 bg-blue-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"><option value="">Select Name</option><option value="Sakin">Sakin</option></select></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Size</label><select value={size} onChange={e=>setSize(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"><option value="11 Inch">11 Inch</option><option value="15 Inch">15 Inch</option></select></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Total Amount / Selling Price (৳)</label><input type="number" min="0" value={productPrice} onChange={e=>setProductPrice(e.target.value)} placeholder="Enter customer selling price" className="h-11 w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Cost (৳)</label><input type="number" min="0" value={productCostInput} onChange={e=>setProductCostInput(e.target.value)} placeholder="Enter product cost" className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
