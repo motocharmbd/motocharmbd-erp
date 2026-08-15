@@ -9,11 +9,9 @@ type Order = {
   id: string | number;
   order_date: string;
   total_amount: number;
-  profit: number;
   product_cost?: number;
   delivery_charge?: number;
   boost_cost?: number;
-  total_cost?: number;
   customer_name?: string;
   phone?: string;
   status?: string;
@@ -26,11 +24,6 @@ const n = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
-
-// Dashboard profit = Selling Price - Product Cost - Delivery Charge.
-// Boost cost is intentionally NOT deducted here, as requested.
-const calculateProfit = (order: Order) =>
-  n(order.total_amount) - n(order.product_cost) - n(order.delivery_charge);
 
 export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -70,16 +63,9 @@ export default function DashboardPage() {
       return;
     }
 
-    const calculatedOrders = (data || []).map((item) => ({
-      ...(item as Order),
-      total_cost: n(item.product_cost) + n(item.delivery_charge),
-      profit: calculateProfit(item as Order),
-    }));
-
-    setOrders(calculatedOrders);
+    setOrders((data || []) as Order[]);
   }
 
-  // Every saved order is counted. Status only determines its status bucket.
   const totalOrdersCount = orders.length;
   const deliveredOrdersCount = orders.filter((item) => String(item.status || "").toLowerCase() === "delivered").length;
   const cancelledOrdersCount = orders.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length;
@@ -89,27 +75,28 @@ export default function DashboardPage() {
   }).length;
 
   const totalSalesAmount = orders.reduce((sum, item) => sum + n(item.total_amount), 0);
-  const totalProfitAmount = orders.reduce((sum, item) => sum + calculateProfit(item), 0);
+  const totalDeliveryCharge = orders.reduce((sum, item) => sum + n(item.delivery_charge), 0);
+  const totalProductCost = orders.reduce((sum, item) => sum + n(item.product_cost), 0);
 
-  // Sakin summary: assigned orders include cancelled orders; commission is paid only
-  // for non-cancelled assigned orders, so a cancellation automatically removes ৳15.
   const sakinOrders = orders.filter((item) => confirmedByOrderId[String(item.id)] === "Sakin");
   const sakinTotalOrders = sakinOrders.length;
+  const sakinDeliveredOrders = sakinOrders.filter(
+    (item) => String(item.status || "").toLowerCase() === "delivered"
+  ).length;
   const sakinCancelledOrders = sakinOrders.filter(
     (item) => String(item.status || "").toLowerCase() === "cancelled"
   ).length;
   const sakinCommission = Math.max(0, sakinTotalOrders - sakinCancelledOrders) * COMMISSION_PER_ORDER;
 
-  const chartDataMap: Record<string, { date: string; orders: number; sales: number; profit: number }> = {};
+  const chartDataMap: Record<string, { date: string; orders: number; sales: number }> = {};
 
   orders.forEach((item) => {
     const date = item.order_date || "Unknown";
     if (!chartDataMap[date]) {
-      chartDataMap[date] = { date, orders: 0, sales: 0, profit: 0 };
+      chartDataMap[date] = { date, orders: 0, sales: 0 };
     }
     chartDataMap[date].orders += 1;
     chartDataMap[date].sales += n(item.total_amount);
-    chartDataMap[date].profit += calculateProfit(item);
   });
 
   const graphData = Object.values(chartDataMap).sort(
@@ -140,18 +127,25 @@ export default function DashboardPage() {
           <h3 className="text-2xl font-bold text-purple-600 mt-2">৳ {totalSalesAmount.toLocaleString()}</h3>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <p className="text-sm font-medium text-gray-500">Total Profit</p>
-          <h3 className={`text-2xl font-bold mt-2 ${totalProfitAmount >= 0 ? "text-green-600" : "text-red-600"}`}>
-            ৳ {totalProfitAmount.toLocaleString()}
-          </h3>
+          <p className="text-sm font-medium text-gray-500">Total Delivery Charge</p>
+          <h3 className="text-2xl font-bold text-orange-600 mt-2">৳ {totalDeliveryCharge.toLocaleString()}</h3>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <p className="text-sm font-medium text-gray-500">Sakin Summary</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Orders: {sakinTotalOrders}</span>
-            <span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancel: {sakinCancelledOrders}</span>
-            <span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Commission: ৳{sakinCommission}</span>
-          </div>
+          <p className="text-sm font-medium text-gray-500">Total Product Cost</p>
+          <h3 className="text-2xl font-bold text-red-600 mt-2">৳ {totalProductCost.toLocaleString()}</h3>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 mb-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Sakin Summary</h2>
+          <p className="text-sm text-gray-500">Sakin assigned orders and commission status</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Orders: {sakinTotalOrders}</span>
+          <span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Delivered: {sakinDeliveredOrders}</span>
+          <span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancel: {sakinCancelledOrders}</span>
+          <span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Commission: ৳{sakinCommission}</span>
         </div>
       </div>
 
@@ -177,7 +171,7 @@ export default function DashboardPage() {
       <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 mb-6">
         <div className="mb-4">
           <h2 className="text-xl font-bold text-gray-800">Performance & Trend</h2>
-          <p className="text-sm text-gray-500">Track daily orders, sales, and profit ups & downs</p>
+          <p className="text-sm text-gray-500">Track daily orders and sales</p>
         </div>
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -189,7 +183,6 @@ export default function DashboardPage() {
               <Legend />
               <Line type="monotone" dataKey="orders" name="Total Orders" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 7 }} />
               <Line type="monotone" dataKey="sales" name="Sales (৳)" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="profit" name="Profit (৳)" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -207,24 +200,19 @@ export default function DashboardPage() {
                 <th className="p-3 font-semibold">Invoice ID</th>
                 <th className="p-3 font-semibold">Date</th>
                 <th className="p-3 font-semibold">Amount (৳)</th>
-                <th className="p-3 font-semibold">Profit (৳)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-sm">
-              {recentOrders.length > 0 ? recentOrders.map((order) => {
-                const profit = calculateProfit(order);
-                return (
-                  <tr key={order.id} className="hover:bg-gray-50 transition">
-                    <td className="p-3 font-semibold text-blue-600">
-                      <Link href={`/orders/${order.id}`} className="hover:underline">{formatInvoiceId(order.id)}</Link>
-                    </td>
-                    <td className="p-3 text-gray-500">{order.order_date || "N/A"}</td>
-                    <td className="p-3 font-semibold text-purple-600">৳ {n(order.total_amount).toLocaleString()}</td>
-                    <td className={`p-3 font-semibold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>৳ {profit.toLocaleString()}</td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan={4} className="p-6 text-center text-gray-400">No orders found yet.</td></tr>
+              {recentOrders.length > 0 ? recentOrders.map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50 transition">
+                  <td className="p-3 font-semibold text-blue-600">
+                    <Link href={`/orders/${order.id}`} className="hover:underline">{formatInvoiceId(order.id)}</Link>
+                  </td>
+                  <td className="p-3 text-gray-500">{order.order_date || "N/A"}</td>
+                  <td className="p-3 font-semibold text-purple-600">৳ {n(order.total_amount).toLocaleString()}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={3} className="p-6 text-center text-gray-400">No orders found yet.</td></tr>
               )}
             </tbody>
           </table>
