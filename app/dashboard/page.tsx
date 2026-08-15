@@ -19,6 +19,7 @@ type Order = {
   status?: string;
 };
 
+const COMMISSION_PER_ORDER = 15;
 const formatInvoiceId = (id: string | number) => `MCB-${String(id).slice(0, 6).toUpperCase()}`;
 
 const n = (value: unknown): number => {
@@ -26,14 +27,36 @@ const n = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+// Dashboard profit = Selling Price - Product Cost - Delivery Charge.
+// Boost cost is intentionally NOT deducted here, as requested.
 const calculateProfit = (order: Order) =>
-  n(order.total_amount) - n(order.product_cost) - n(order.delivery_charge) - n(order.boost_cost);
+  n(order.total_amount) - n(order.product_cost) - n(order.delivery_charge);
 
 export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [confirmedByOrderId, setConfirmedByOrderId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadOrders();
+
+    try {
+      const saved = localStorage.getItem("mcb_order_confirmed_by");
+      if (saved) setConfirmedByOrderId(JSON.parse(saved));
+    } catch (error) {
+      console.error("Failed to load Sakin assignments", error);
+    }
+
+    const syncAssignments = () => {
+      try {
+        const saved = localStorage.getItem("mcb_order_confirmed_by");
+        setConfirmedByOrderId(saved ? JSON.parse(saved) : {});
+      } catch (error) {
+        console.error("Failed to sync Sakin assignments", error);
+      }
+    };
+
+    window.addEventListener("storage", syncAssignments);
+    return () => window.removeEventListener("storage", syncAssignments);
   }, []);
 
   async function loadOrders() {
@@ -49,22 +72,33 @@ export default function DashboardPage() {
 
     const calculatedOrders = (data || []).map((item) => ({
       ...(item as Order),
-      total_cost:
-        n(item.product_cost) + n(item.delivery_charge) + n(item.boost_cost),
+      total_cost: n(item.product_cost) + n(item.delivery_charge),
       profit: calculateProfit(item as Order),
     }));
 
     setOrders(calculatedOrders);
   }
 
+  // Every saved order is counted. Status only determines its status bucket.
   const totalOrdersCount = orders.length;
+  const deliveredOrdersCount = orders.filter((item) => String(item.status || "").toLowerCase() === "delivered").length;
+  const cancelledOrdersCount = orders.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length;
+  const processingOrdersCount = orders.filter((item) => {
+    const status = String(item.status || "").toLowerCase();
+    return status !== "delivered" && status !== "cancelled";
+  }).length;
+
   const totalSalesAmount = orders.reduce((sum, item) => sum + n(item.total_amount), 0);
-  const totalCostAmount = orders.reduce(
-    (sum, item) => sum + n(item.product_cost) + n(item.delivery_charge) + n(item.boost_cost),
-    0
-  );
-  const totalProfitAmount = totalSalesAmount - totalCostAmount;
-  const averageOrderValue = totalOrdersCount > 0 ? totalSalesAmount / totalOrdersCount : 0;
+  const totalProfitAmount = orders.reduce((sum, item) => sum + calculateProfit(item), 0);
+
+  // Sakin summary: assigned orders include cancelled orders; commission is paid only
+  // for non-cancelled assigned orders, so a cancellation automatically removes ৳15.
+  const sakinOrders = orders.filter((item) => confirmedByOrderId[String(item.id)] === "Sakin");
+  const sakinTotalOrders = sakinOrders.length;
+  const sakinCancelledOrders = sakinOrders.filter(
+    (item) => String(item.status || "").toLowerCase() === "cancelled"
+  ).length;
+  const sakinCommission = Math.max(0, sakinTotalOrders - sakinCancelledOrders) * COMMISSION_PER_ORDER;
 
   const chartDataMap: Record<string, { date: string; orders: number; sales: number; profit: number }> = {};
 
@@ -112,8 +146,31 @@ export default function DashboardPage() {
           </h3>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <p className="text-sm font-medium text-gray-500">Avg. Order Value (AOV)</p>
-          <h3 className="text-2xl font-bold text-blue-600 mt-2">৳ {averageOrderValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+          <p className="text-sm font-medium text-gray-500">Sakin Summary</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Orders: {sakinTotalOrders}</span>
+            <span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancel: {sakinCancelledOrders}</span>
+            <span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Commission: ৳{sakinCommission}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+          <p className="text-xs font-medium text-gray-500">All Orders</p>
+          <p className="mt-1 text-xl font-bold text-gray-800">{totalOrdersCount}</p>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+          <p className="text-xs font-medium text-gray-500">Delivered</p>
+          <p className="mt-1 text-xl font-bold text-green-600">{deliveredOrdersCount}</p>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+          <p className="text-xs font-medium text-gray-500">Cancelled</p>
+          <p className="mt-1 text-xl font-bold text-red-600">{cancelledOrdersCount}</p>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
+          <p className="text-xs font-medium text-gray-500">Processing</p>
+          <p className="mt-1 text-xl font-bold text-blue-600">{processingOrdersCount}</p>
         </div>
       </div>
 
