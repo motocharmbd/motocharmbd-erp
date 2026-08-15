@@ -26,9 +26,10 @@ export default function OrdersPage() {
 
   const [size, setSize] = useState("11 Inch");
   const [qty, setQty] = useState("1");
-  const [giftBox, setGiftBox] = useState("No");
+  const [productPrice, setProductPrice] = useState("");
+  const [productCostInput, setProductCostInput] = useState("");
+  const [giftBox, setGiftBox] = useState(false);
 
-  const [totalAmount, setTotalAmount] = useState("");
   const [deliveryCharge, setDeliveryCharge] = useState("60");
   const [boostCost, setBoostCost] = useState("0");
   const [advancedPaid, setAdvancedPaid] = useState("0");
@@ -38,24 +39,16 @@ export default function OrdersPage() {
   const [fraudError, setFraudError] = useState("");
 
   const quantity = Number(qty) || 0;
-
-  const baseProductCost =
-    size === "11 Inch" ? quantity * 150 : quantity * 180;
-
-  const giftBoxCost = giftBox === "Yes" ? quantity * 70 : 0;
-
-  const productCost = baseProductCost + giftBoxCost;
-
-  // Customer selling amount is entered manually.
-  // COD = selling amount + delivery - advance.
-  const sellingAmount = Number(totalAmount) || 0;
+  const sellingAmount = Number(productPrice) || 0;
+  const productCost = Number(productCostInput) || 0;
+  const giftBoxCost = giftBox ? quantity * 70 : 0;
   const delivery = Number(deliveryCharge) || 0;
-  const advance = Number(advancedPaid) || 0;
   const boost = Number(boostCost) || 0;
+  const advance = Number(advancedPaid) || 0;
 
+  const totalCost = productCost + giftBoxCost + delivery + boost;
   const calculatedTotal = sellingAmount + delivery;
   const finalDue = calculatedTotal - advance;
-  const totalCost = productCost + delivery + boost;
   const profit = sellingAmount - totalCost;
 
   useEffect(() => {
@@ -130,7 +123,15 @@ export default function OrdersPage() {
           : "text-red-600 bg-red-50 border-red-200";
 
   async function saveOrder() {
-    if (!customerName || !phone || !address || !size || !qty || !totalAmount) {
+    if (
+      !customerName ||
+      !phone ||
+      !address ||
+      !size ||
+      !qty ||
+      !productPrice ||
+      !productCostInput
+    ) {
       alert("Please fill all required fields");
       return;
     }
@@ -150,9 +151,8 @@ export default function OrdersPage() {
         order_date: new Date().toISOString().split("T")[0],
         size,
         qty: quantity,
-        // Keep the existing DB schema. Gift-box cost is included in product_cost.
-        total_amount: sellingAmount,
-        product_cost: productCost,
+        total_amount: finalDue,
+        product_cost: productCost + giftBoxCost,
         delivery_charge: delivery,
         boost_cost: boost,
         total_cost: totalCost,
@@ -173,8 +173,9 @@ export default function OrdersPage() {
     setAddress("");
     setSize("11 Inch");
     setQty("1");
-    setGiftBox("No");
-    setTotalAmount("");
+    setProductPrice("");
+    setProductCostInput("");
+    setGiftBox(false);
     setDeliveryCharge("60");
     setBoostCost("0");
     setAdvancedPaid("0");
@@ -203,8 +204,16 @@ export default function OrdersPage() {
           transform-origin: center;
         }
         @keyframes motoCharmPulse {
-          0%, 100% { opacity: 0.72; transform: translateY(0) scale(1); letter-spacing: 0.08em; }
-          50% { opacity: 1; transform: translateY(-2px) scale(1.04); letter-spacing: 0.12em; }
+          0%, 100% {
+            opacity: 0.72;
+            transform: translateY(0) scale(1);
+            letter-spacing: 0.08em;
+          }
+          50% {
+            opacity: 1;
+            transform: translateY(-2px) scale(1.04);
+            letter-spacing: 0.12em;
+          }
         }
       `}</style>
 
@@ -215,114 +224,339 @@ export default function OrdersPage() {
           <div>
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Order Management</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Order Management
+              </span>
             </div>
-            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">Create Order</h1>
-            <p className="mt-0.5 text-sm text-slate-500">Enter customer details and verify delivery risk before saving.</p>
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">
+              Create Order
+            </h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Enter customer details and verify delivery risk before saving.
+            </p>
           </div>
+
           <div className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2 text-right shadow-sm sm:block">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">COD Amount</p>
-            <p className="text-lg font-extrabold text-emerald-600">৳{finalDue.toLocaleString()}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              COD Amount
+            </p>
+            <p className="text-lg font-extrabold text-emerald-600">
+              ৳{finalDue.toLocaleString()}
+            </p>
           </div>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
-              <h2 className="text-sm font-extrabold text-slate-800">Customer & Order Details</h2>
-              <p className="mt-0.5 text-xs text-slate-400">Required information for this order</p>
+              <h2 className="text-sm font-extrabold text-slate-800">
+                Customer & Order Details
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Required information for this order
+              </p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">New Order</span>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+              New Order
+            </span>
           </div>
 
           <div className="p-5">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Customer Name</label>
-                <input type="text" placeholder="Enter customer name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Customer Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter customer name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
 
               <div>
                 <label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-600">
                   <span>Phone Number</span>
-                  <span className="font-medium normal-case tracking-normal text-slate-400">11 digits = auto check</span>
+                  <span className="font-medium normal-case tracking-normal text-slate-400">
+                    11 digits = auto check
+                  </span>
                 </label>
                 <div className="relative">
-                  <input type="text" inputMode="numeric" placeholder="017XXXXXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} className={`h-11 w-full rounded-xl border bg-white px-3.5 pr-16 text-sm font-semibold tracking-wide text-slate-800 outline-none transition placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 ${successRate !== null ? successRate >= 80 ? "border-emerald-300" : successRate >= 50 ? "border-amber-300" : "border-red-300" : "border-slate-200"}`} />
-                  {successRate !== null && !fraudLoading && !fraudError && <span className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-xs font-black ${successRateClass}`} title="Courier success score">{successRate}%</span>}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="017XXXXXXXX"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className={`h-11 w-full rounded-xl border bg-white px-3.5 pr-16 text-sm font-semibold tracking-wide text-slate-800 outline-none transition placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 ${
+                      successRate !== null
+                        ? successRate >= 80
+                          ? "border-emerald-300"
+                          : successRate >= 50
+                            ? "border-amber-300"
+                            : "border-red-300"
+                        : "border-slate-200"
+                    }`}
+                  />
+                  {successRate !== null && !fraudLoading && !fraudError && (
+                    <span
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-xs font-black ${successRateClass}`}
+                      title="Courier success score"
+                    >
+                      {successRate}%
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Delivery Address</label>
-                <input type="text" placeholder="Enter delivery address" value={address} onChange={(e) => setAddress(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Delivery Address
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter delivery address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Size</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <select value={size} onChange={(e) => setSize(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-                    <option value="11 Inch">11 Inch — ৳150</option>
-                    <option value="15 Inch">15 Inch — ৳180</option>
-                  </select>
-                  <select value={giftBox} onChange={(e) => setGiftBox(e.target.value)} className="h-11 w-full rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100">
-                    <option value="No">Gift Box — No</option>
-                    <option value="Yes">Gift Box — ৳70/pc</option>
-                  </select>
-                </div>
-                {giftBox === "Yes" && <p className="mt-1 text-[10px] font-semibold text-amber-600">Gift Box Cost: ৳{giftBoxCost.toLocaleString()}</p>}
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Product Size
+                </label>
+                <select
+                  value={size}
+                  onChange={(e) => setSize(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option value="11 Inch">11 Inch</option>
+                  <option value="15 Inch">15 Inch</option>
+                </select>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Quantity</label>
-                <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Product Price (৳)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={productPrice}
+                  onChange={(e) => setProductPrice(e.target.value)}
+                  placeholder="Enter selling price manually"
+                  className="h-11 w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Total Amount / Selling Price (৳)</label>
-                <input type="number" min="0" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="Customer থেকে নেওয়া product price" className="h-11 w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Product Cost (৳)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={productCostInput}
+                  onChange={(e) => setProductCostInput(e.target.value)}
+                  placeholder="Enter product cost"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Advanced Paid (৳)</label>
-                <input type="number" min="0" value={advancedPaid} onChange={(e) => setAdvancedPaid(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Delivery Charge (৳)</label>
-                <input type="number" min="0" value={deliveryCharge} onChange={(e) => setDeliveryCharge(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Gift Box
+                </label>
+                <label className="flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5">
+                  <input
+                    type="checkbox"
+                    checked={giftBox}
+                    onChange={(e) => setGiftBox(e.target.checked)}
+                    className="h-4 w-4 accent-amber-500"
+                  />
+                  <span className="text-sm font-bold text-amber-800">Yes</span>
+                </label>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Boost Cost (৳)</label>
-                <input type="number" min="0" value={boostCost} onChange={(e) => setBoostCost(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Delivery Charge (৳)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={deliveryCharge}
+                  onChange={(e) => setDeliveryCharge(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Boost Cost (৳)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={boostCost}
+                  onChange={(e) => setBoostCost(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                  Advanced Paid (৳)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={advancedPaid}
+                  onChange={(e) => setAdvancedPaid(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                />
               </div>
             </div>
 
             <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/80">
-              <div className="grid grid-cols-2 divide-x divide-slate-200 md:grid-cols-5">
-                <div className="px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Product</p><p className="mt-1 text-sm font-bold text-slate-800">৳{baseProductCost.toLocaleString()}</p></div>
-                <div className="px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Gift Box</p><p className="mt-1 text-sm font-bold text-amber-700">৳{giftBoxCost.toLocaleString()}</p></div>
-                <div className="px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Delivery</p><p className="mt-1 text-sm font-bold text-slate-800">৳{delivery.toLocaleString()}</p></div>
-                <div className="px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Profit</p><p className={`mt-1 text-sm font-extrabold ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>৳{profit.toLocaleString()}</p></div>
-                <div className="border-t border-slate-200 bg-emerald-50 px-4 py-3 md:border-t-0"><p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Total Due / COD</p><p className="mt-1 text-lg font-extrabold text-emerald-600">৳{finalDue.toLocaleString()}</p></div>
+              <div className="grid grid-cols-2 divide-x divide-slate-200 md:grid-cols-6">
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Price</p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">৳{sellingAmount.toLocaleString()}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Product Cost</p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">৳{productCost.toLocaleString()}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Gift Box</p>
+                  <p className="mt-1 text-sm font-bold text-amber-700">৳{giftBoxCost.toLocaleString()}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Delivery + Boost</p>
+                  <p className="mt-1 text-sm font-bold text-slate-800">৳{(delivery + boost).toLocaleString()}</p>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Profit</p>
+                  <p className={`mt-1 text-sm font-extrabold ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>৳{profit.toLocaleString()}</p>
+                </div>
+                <div className="border-t border-slate-200 bg-emerald-50 px-4 py-3 md:border-t-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Total Due / COD</p>
+                  <p className="mt-1 text-lg font-extrabold text-emerald-600">৳{finalDue.toLocaleString()}</p>
+                </div>
               </div>
             </div>
 
             {phone.replace(/\D/g, "").length === 11 && (
               <div className="mt-4">
-                {fraudLoading && <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="flex items-center gap-3"><div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /><span className="text-sm font-semibold text-slate-600">Checking customer risk...</span></div><span className="text-[11px] font-medium text-slate-400">Courier network</span></div>}
-                {fraudError && !fraudLoading && <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"><div><p className="text-sm font-bold text-amber-700">Risk check unavailable</p><p className="mt-0.5 text-xs text-amber-600">{fraudError}</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700">API ERROR</span></div>}
-                {fraudResult && !fraudLoading && !fraudError && <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
-                  {reports.length > 0 ? <div className="flex-1 rounded-xl border border-red-200 bg-red-50 px-4 py-3"><div className="flex items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-black text-red-600">!</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-extrabold text-red-700">FRAUD REPORT FOUND</h3><span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">{reports.length} REPORT{reports.length > 1 ? "S" : ""}</span></div><div className="mt-1 space-y-0.5">{reports.slice(0, 2).map((report: any, index: number) => <p key={index} className="truncate text-xs text-red-600"><span className="font-semibold">{report.courierName || report.name || "Unknown Courier"}:</span>{" "}{report.details || report.reason || "Fraud reported"}</p>)}{reports.length > 2 && <p className="text-[11px] font-semibold text-red-500">+{reports.length - 2} more report(s)</p>}</div></div></div></div> : <div className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"><div className="flex items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-600">✓</div><div><h3 className="text-sm font-extrabold text-emerald-700">NO FRAUD REPORT</h3><p className="mt-0.5 text-xs text-emerald-600">No reported fraud or scam record found.</p></div></div></div>}
-                  {summary && <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="min-w-[78px] px-3 py-2 text-center"><p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Orders</p><p className="mt-0.5 text-lg font-black text-slate-800">{summary.total_parcel ?? 0}</p></div><div className="min-w-[78px] border-l border-slate-100 bg-emerald-50/50 px-3 py-2 text-center"><p className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">Success</p><p className="mt-0.5 text-lg font-black text-emerald-600">{summary.success_parcel ?? 0}</p></div><div className="min-w-[78px] border-l border-slate-100 bg-red-50/50 px-3 py-2 text-center"><p className="text-[9px] font-bold uppercase tracking-wide text-red-500">Cancelled</p><p className="mt-0.5 text-lg font-black text-red-500">{summary.cancelled_parcel ?? 0}</p></div></div>}
-                </div>}
+                {fraudLoading && (
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+                      <span className="text-sm font-semibold text-slate-600">Checking customer risk...</span>
+                    </div>
+                    <span className="text-[11px] font-medium text-slate-400">Courier network</span>
+                  </div>
+                )}
+
+                {fraudError && !fraudLoading && (
+                  <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-bold text-amber-700">Risk check unavailable</p>
+                      <p className="mt-0.5 text-xs text-amber-600">{fraudError}</p>
+                    </div>
+                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700">API ERROR</span>
+                  </div>
+                )}
+
+                {fraudResult && !fraudLoading && !fraudError && (
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+                    {reports.length > 0 ? (
+                      <div className="flex-1 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-black text-red-600">!</div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-sm font-extrabold text-red-700">FRAUD REPORT FOUND</h3>
+                              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                                {reports.length} REPORT{reports.length > 1 ? "S" : ""}
+                              </span>
+                            </div>
+                            <div className="mt-1 space-y-0.5">
+                              {reports.slice(0, 2).map((report: any, index: number) => (
+                                <p key={index} className="truncate text-xs text-red-600">
+                                  <span className="font-semibold">
+                                    {report.courierName || report.name || "Unknown Courier"}:
+                                  </span>{" "}
+                                  {report.details || report.reason || "Fraud reported"}
+                                </p>
+                              ))}
+                              {reports.length > 2 && (
+                                <p className="text-[11px] font-semibold text-red-500">+{reports.length - 2} more report(s)</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-600">✓</div>
+                          <div>
+                            <h3 className="text-sm font-extrabold text-emerald-700">NO FRAUD REPORT</h3>
+                            <p className="mt-0.5 text-xs text-emerald-600">No reported fraud or scam record found.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {summary && (
+                      <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <div className="min-w-[78px] px-3 py-2 text-center">
+                          <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Orders</p>
+                          <p className="mt-0.5 text-lg font-black text-slate-800">{summary.total_parcel ?? 0}</p>
+                        </div>
+                        <div className="min-w-[78px] border-l border-slate-100 bg-emerald-50/50 px-3 py-2 text-center">
+                          <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">Success</p>
+                          <p className="mt-0.5 text-lg font-black text-emerald-600">{summary.success_parcel ?? 0}</p>
+                        </div>
+                        <div className="min-w-[78px] border-l border-slate-100 bg-red-50/50 px-3 py-2 text-center">
+                          <p className="text-[9px] font-bold uppercase tracking-wide text-red-500">Cancelled</p>
+                          <p className="mt-0.5 text-lg font-black text-red-500">{summary.cancelled_parcel ?? 0}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             <div className="mt-5 flex flex-col-reverse items-stretch justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
-              <p className="text-xs text-slate-400">Order will be saved with <span className="font-semibold text-slate-600">Pending</span> status.</p>
-              <button onClick={saveOrder} className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-7 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md active:scale-[0.99]">Save Order</button>
+              <p className="text-xs text-slate-400">
+                Order will be saved with <span className="font-semibold text-slate-600">Pending</span> status.
+              </p>
+              <button
+                onClick={saveOrder}
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-600 px-7 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md active:scale-[0.99]"
+              >
+                Save Order
+              </button>
             </div>
           </div>
         </div>
