@@ -1,122 +1,48 @@
 name: One-time orders history status fix
-
-on:
-  push:
-    branches: [main]
-
+on: push
 permissions:
   contents: write
-
 jobs:
-  fix-orders-history:
-    if: ${{ !contains(github.event.head_commit.message, '[orders-history-fixed]') }}
+  fix:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Patch status handling
+      - uses: actions/checkout@v4
+      - name: Patch orders history
+        shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
+          p=Path('app/orders-history/page.tsx')
+          s=p.read_text(encoding='utf-8')
 
-          path = Path('app/orders-history/page.tsx')
-          text = path.read_text(encoding='utf-8')
+          helper='''function mapSteadfastStatus(value: unknown): string {\n  const status = String(value || "").trim().toLowerCase();\n  if (["delivered", "partial_delivered"].includes(status)) return "Delivered";\n  if (status === "cancelled") return "Cancelled";\n  if (status.includes("return")) return "Returned";\n  if (["pending", "delivered_approval_pending", "partial_delivered_approval_pending", "cancelled_approval_pending", "unknown_approval_pending", "hold", "in_review", "unknown"].includes(status)) return "Processing";\n  return "";\n}\n'''
+          if 'function mapSteadfastStatus' not in s:
+              s=s.replace('function scoreFromFraudResponse(payload:any):number {',helper+'\nfunction scoreFromFraudResponse(payload:any):number {',1)
 
-          marker = 'function mapSteadfastStatus(value: unknown): string {'
-          if marker not in text:
-              anchor = 'function scoreFromFraudResponse(payload:any):number {'
-              helper = '''function mapSteadfastStatus(value: unknown): string {
-  const status = String(value || "").trim().toLowerCase();
-  if (["delivered", "partial_delivered"].includes(status)) return "Delivered";
-  if (status === "cancelled") return "Cancelled";
-  if (status.includes("return")) return "Returned";
-  if (["pending", "delivered_approval_pending", "partial_delivered_approval_pending", "cancelled_approval_pending", "unknown_approval_pending", "hold", "in_review", "unknown"].includes(status)) return "Processing";
-  return "";
-}
-'''
-              text = text.replace(anchor, helper + '\n' + anchor, 1)
+          a=s.index('  async function syncAllTrackingCodes(currentOrders:Order[]){')
+          b=s.index('  const filteredOrders=useMemo(',a)
+          sync='''  async function syncAllTrackingCodes(currentOrders:Order[]){\n    const updated=[...currentOrders]; let changed=false;\n    for(let i=0;i<updated.length;i++){\n      const item=updated[i]; if(!item.tracking_code) continue;\n      try{\n        const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`,{cache:"no-store"});\n        const data=await response.json();\n        if(!response.ok || !data?.delivery_status) continue;\n        const nextStatus=mapSteadfastStatus(data.delivery_status);\n        if(!nextStatus || nextStatus===item.status) continue;\n        changed=true; updated[i]=withCalculatedValues({...item,status:nextStatus});\n        await supabase.from("orders").update({status:nextStatus}).eq("id",item.id);\n      }catch(error){console.error("Tracking sync error",item.tracking_code,error);}\n    }\n    if(changed)setOrders(updated);\n  }\n'''
+          s=s[:a]+sync+s[b:]
 
-          old_sync_start = '  async function syncAllTrackingCodes(currentOrders:Order[]){'
-          old_sync_end = '  const filteredOrders=useMemo('
-          start = text.find(old_sync_start)
-          end = text.find(old_sync_end, start)
-          if start == -1 or end == -1:
-              raise SystemExit('Could not locate tracking sync function')
-          new_sync = '''  async function syncAllTrackingCodes(currentOrders:Order[]){
-    const updated=[...currentOrders];
-    let changed=false;
-    for(let i=0;i<updated.length;i++){
-      const item=updated[i];
-      if(!item.tracking_code) continue;
-      try{
-        const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`,{cache:"no-store"});
-        const data=await response.json();
-        if(!response.ok || !data?.delivery_status) continue;
-        const nextStatus=mapSteadfastStatus(data.delivery_status);
-        if(!nextStatus || nextStatus===item.status) continue;
-        changed=true;
-        updated[i]=withCalculatedValues({...item,status:nextStatus});
-        await supabase.from("orders").update({status:nextStatus}).eq("id",item.id);
-      }catch(error){console.error("Tracking sync error",item.tracking_code,error);}
-    }
-    if(changed)setOrders(updated);
-  }
-'''
-          text = text[:start] + new_sync + text[end:]
+          a=s.index('  async function handleAddOrUpdateTracking(item:Order,isEdit=false){')
+          b=s.index('  function downloadInvoice(order:Order){',a)
+          track='''  async function handleAddOrUpdateTracking(item:Order,isEdit=false){\n    let trackingInput=item.tracking_code; const previousTracking=item.tracking_code||"";\n    if(!trackingInput||isEdit){\n      const input=window.prompt("Enter Steadfast Tracking ID:",item.tracking_code||"");\n      if(input===null)return; trackingInput=input.trim(); if(!trackingInput)return;\n    }\n    try{\n      const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingInput)}`,{cache:"no-store"});\n      const data=await response.json();\n      if(!response.ok){alert("Steadfast API error: "+(data?.error||"Unable to verify tracking ID"));return;}\n      const apiStatus=mapSteadfastStatus(data?.delivery_status);\n      const status=apiStatus || (trackingInput!==previousTracking ? "Processing" : (item.status||"Pending"));\n      const {error}=await supabase.from("orders").update({tracking_code:trackingInput,status}).eq("id",item.id);\n      if(error){alert("Failed to update database: "+error.message);return;}\n      const updated=withCalculatedValues({...item,tracking_code:trackingInput,status});\n      setOrders(c=>c.map(o=>o.id===item.id?updated:o));\n      setSelectedDateOrders(c=>c?{...c,orders:c.orders.map(o=>o.id===item.id?updated:o)}:null);\n      alert(`Success! Status from Steadfast: ${data?.delivery_status||status}`);\n    }catch(error:any){alert("API Error: "+error.message);}\n  }\n'''
+          s=s[:a]+track+s[b:]
 
-          old_tracking_start = '  async function handleAddOrUpdateTracking(item:Order,isEdit=false){'
-          old_tracking_end = '  function downloadInvoice(order:Order){'
-          start = text.find(old_tracking_start)
-          end = text.find(old_tracking_end, start)
-          if start == -1 or end == -1:
-              raise SystemExit('Could not locate tracking edit function')
-          new_tracking = '''  async function handleAddOrUpdateTracking(item:Order,isEdit=false){
-    let trackingInput=item.tracking_code;
-    const previousTracking=item.tracking_code||"";
-    if(!trackingInput||isEdit){
-      const input=window.prompt("Enter Steadfast Tracking ID:",item.tracking_code||"");
-      if(input===null)return;
-      trackingInput=input.trim();
-      if(!trackingInput)return;
-    }
-    try{
-      const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingInput)}`,{cache:"no-store"});
-      const data=await response.json();
-      const apiStatus=mapSteadfastStatus(data?.delivery_status);
-      const trackingChanged=trackingInput!==previousTracking;
-      const status=apiStatus || (trackingChanged ? "Processing" : (item.status||"Pending"));
-      if(!response.ok){alert("Steadfast API error: "+(data?.error||"Unable to verify tracking ID"));return;}
-      const {error}=await supabase.from("orders").update({tracking_code:trackingInput,status}).eq("id",item.id);
-      if(error){alert("Failed to update database: "+error.message);return;}
-      const updated=withCalculatedValues({...item,tracking_code:trackingInput,status});
-      setOrders(c=>c.map(o=>o.id===item.id?updated:o));
-      setSelectedDateOrders(c=>c?{...c,orders:c.orders.map(o=>o.id===item.id?updated:o)}:null);
-      alert(`Success! Status from Steadfast: ${data?.delivery_status||status}`);
-    }catch(error:any){alert("API Error: "+error.message);}
-  }
-'''
-          text = text[:start] + new_tracking + text[end:]
-
-          old_summary = '''  function SakinSummary({rows}:{rows:Order[]}){const count=confirmedCount(rows),cancelled=cancelledCount(rows),commission=commissionTotal(rows);return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Sakin Orders: {count}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Sakin Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Sakin Commission: {money(commission)}</span></div>;}
-'''
-          new_summary = '''  function SakinSummary({rows}:{rows:Order[]}){const count=confirmedCount(rows),delivered=rows.filter(row=>confirmedByOrderId[String(row.id)]==="Sakin"&&String(row.status||"").toLowerCase()==="delivered").length,cancelled=cancelledCount(rows),commission=commissionTotal(rows);return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Sakin Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Sakin Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Sakin Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Sakin Commission: {money(commission)}</span></div>;}
-'''
-          if old_summary not in text:
-              raise SystemExit('Could not locate Sakin summary')
-          text = text.replace(old_summary,new_summary,1)
-
-          path.write_text(text,encoding='utf-8')
-          print('orders-history status patch applied')
+          a=s.index('  function SakinSummary({rows:Order[]})') if 'function SakinSummary({rows:Order[]})' in s else s.index('  function SakinSummary({rows}:{rows:Order[]})')
+          b=s.index('  function OrderTable',a)
+          summary='''  function SakinSummary({rows}:{rows:Order[]}){const count=confirmedCount(rows),delivered=rows.filter(row=>confirmedByOrderId[String(row.id)]==="Sakin"&&String(row.status||"").toLowerCase()==="delivered").length,cancelled=cancelledCount(rows),commission=commissionTotal(rows);return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Sakin Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Sakin Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Sakin Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Sakin Commission: {money(commission)}</span></div>;}\n'''
+          s=s[:a]+summary+s[b:]
+          p.write_text(s,encoding='utf-8')
           PY
-
-      - name: Commit and remove one-time workflow
+      - name: Commit source fix and remove workflow
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/orders-history/page.tsx
-          git diff --cached --quiet && echo "No source changes needed" || git commit -m "Fix orders history tracking and Sakin status [orders-history-fixed]"
+          git commit -m "Fix orders history tracking and Sakin status [orders-history-fixed]" || true
           rm -f .github/workflows/one-time-orders-history-fix.yml
-          git add .github/workflows/one-time-orders-history-fix.yml
-          git commit -m "Remove one-time orders history fix workflow [orders-history-fixed]"
+          git add -A
+          git commit -m "Remove one-time fix workflow [orders-history-fixed]" || true
           git push
