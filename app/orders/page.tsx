@@ -13,10 +13,13 @@ const motoCharmHeader = (
   <div className="moto-charm-header" aria-label="Moto Charm BD"><span>Moto Charm BD</span></div>
 );
 
+const getTodayDhaka = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date());
+
 export default function OrdersPage() {
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [orderDate, setOrderDate] = useState(getTodayDhaka());
   const [size, setSize] = useState("11 Inch");
   const [qty, setQty] = useState("1");
   const [productPrice, setProductPrice] = useState("");
@@ -101,7 +104,7 @@ export default function OrdersPage() {
   const successRateClass = successRate === null ? "" : successRate >= 80 ? "text-emerald-600 bg-emerald-50 border-emerald-200" : successRate >= 50 ? "text-amber-600 bg-amber-50 border-amber-200" : "text-red-600 bg-red-50 border-red-200";
 
   async function saveOrder() {
-    if (!customerName || !phone || !address || !size || !qty || !productPrice || !productCostInput) {
+    if (!customerName || !phone || !address || !orderDate || !size || !qty || !productPrice || !productCostInput) {
       alert("Please fill all required fields"); return;
     }
     const cleanPhone = phone.replace(/\D/g, "");
@@ -111,7 +114,7 @@ export default function OrdersPage() {
       customer_name: customerName,
       phone: cleanPhone,
       address,
-      order_date: new Date().toISOString().split("T")[0],
+      order_date: orderDate,
       size,
       qty: quantity,
       // total_amount is the customer's selling price, not COD after advance.
@@ -125,7 +128,7 @@ export default function OrdersPage() {
     }]);
     if (error) { alert(error.message); return; }
     alert("Order Saved Successfully");
-    setCustomerName(""); setPhone(""); setAddress(""); setSize("11 Inch"); setQty("1"); setProductPrice(""); setProductCostInput(""); setGiftBox(false); setDeliveryCharge("60"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
+    setCustomerName(""); setPhone(""); setAddress(""); setOrderDate(getTodayDhaka()); setSize("11 Inch"); setQty("1"); setProductPrice(""); setProductCostInput(""); setGiftBox(false); setDeliveryCharge("60"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
   }
 
   return (
@@ -145,6 +148,7 @@ export default function OrdersPage() {
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Customer Name</label><input type="text" placeholder="Enter customer name" value={customerName} onChange={e=>setCustomerName(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
               <div><label className="mb-1.5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-slate-600"><span>Phone Number</span><span className="font-medium normal-case tracking-normal text-slate-400">11 digits = auto check</span></label><div className="relative"><input type="text" inputMode="numeric" placeholder="017XXXXXXXX" value={phone} onChange={e=>setPhone(e.target.value)} className={`h-11 w-full rounded-xl border bg-white px-3.5 pr-16 text-sm font-semibold tracking-wide text-slate-800 outline-none transition placeholder:font-medium placeholder:tracking-normal placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 ${successRate!==null?(successRate>=80?"border-emerald-300":successRate>=50?"border-amber-300":"border-red-300"):"border-slate-200"}`}/>{successRate!==null&&!fraudLoading&&!fraudError&&<span className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-full border px-2.5 py-1 text-xs font-black ${successRateClass}`}>{successRate}%</span>}</div></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Delivery Address</label><input type="text" placeholder="Enter delivery address" value={address} onChange={e=>setAddress(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Order Date</label><input type="date" value={orderDate} onChange={e=>setOrderDate(e.target.value)} className="h-11 w-full rounded-xl border border-blue-200 bg-blue-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Size</label><select value={size} onChange={e=>setSize(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"><option value="11 Inch">11 Inch</option><option value="15 Inch">15 Inch</option></select></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Total Amount / Selling Price (৳)</label><input type="number" min="0" value={productPrice} onChange={e=>setProductPrice(e.target.value)} placeholder="Enter customer selling price" className="h-11 w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Cost (৳)</label><input type="number" min="0" value={productCostInput} onChange={e=>setProductCostInput(e.target.value)} placeholder="Enter product cost" className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
