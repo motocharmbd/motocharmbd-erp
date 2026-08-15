@@ -37,13 +37,13 @@ export default function OrdersPage() {
   const quantity = Number(qty) || 0;
   const sellingAmount = Number(productPrice) || 0;
   const productCost = Number(productCostInput) || 0;
-  const giftBoxCost = giftBox ? quantity * 70 : 0;
   const delivery = Number(deliveryCharge) || 0;
   const boost = Number(boostCost) || 0;
   const advance = Number(advancedPaid) || 0;
 
+  // Gift box is only a Yes/No flag. It never adds money to cost, COD, or profit.
   // Selling price is the customer's total amount. Costs affect profit only, never COD.
-  const totalCost = productCost + giftBoxCost + delivery + boost;
+  const totalCost = productCost + delivery + boost;
   const finalDue = Math.max(0, sellingAmount - advance);
   const profit = sellingAmount - totalCost;
 
@@ -117,9 +117,8 @@ export default function OrdersPage() {
       order_date: orderDate,
       size,
       qty: quantity,
-      // total_amount is the customer's selling price, not COD after advance.
       total_amount: sellingAmount,
-      product_cost: productCost + giftBoxCost,
+      product_cost: productCost,
       delivery_charge: delivery,
       boost_cost: boost,
       total_cost: totalCost,
@@ -152,11 +151,11 @@ export default function OrdersPage() {
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Size</label><select value={size} onChange={e=>setSize(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"><option value="11 Inch">11 Inch</option><option value="15 Inch">15 Inch</option></select></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Total Amount / Selling Price (৳)</label><input type="number" min="0" value={productPrice} onChange={e=>setProductPrice(e.target.value)} placeholder="Enter customer selling price" className="h-11 w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Product Cost (৳)</label><input type="number" min="0" value={productCostInput} onChange={e=>setProductCostInput(e.target.value)} placeholder="Enter product cost" className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
-              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Quantity</label><input type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Quantity</label><input type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
               <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Gift Box</label><label className="flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5"><input type="checkbox" checked={giftBox} onChange={e=>setGiftBox(e.target.checked)} className="h-4 w-4 accent-amber-500"/><span className="text-sm font-bold text-amber-800">Yes</span></label></div>
-              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Delivery Charge (৳)</label><input type="number" min="0" value={deliveryCharge} onChange={e=>setDeliveryCharge(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
-              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Boost Cost (৳)</label><input type="number" min="0" value={boostCost} onChange={e=>setBoostCost(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
-              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Advanced Paid (৳)</label><input type="number" min="0" value={advancedPaid} onChange={e=>setAdvancedPaid(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Delivery Charge (৳)</label><input type="number" min="0" value={deliveryCharge} onChange={e=>setDeliveryCharge(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Boost Cost (৳)</label><input type="number" min="0" value={boostCost} onChange={e=>setBoostCost(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
+              <div><label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-600">Advanced Paid (৳)</label><input type="number" min="0" value={advancedPaid} onChange={e=>setAdvancedPaid(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"/></div>
             </div>
 
             <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/80"><div className="grid grid-cols-2 divide-x divide-slate-200 md:grid-cols-5">
