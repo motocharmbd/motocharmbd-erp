@@ -2,84 +2,163 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import LinkComponent from "next/link";
-import { usePathname } from "next/navigation";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [, setIsAdmin] = useState(true);
+export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    totalProfit: 0,
+    totalCost: 0,
+    totalDeliveryCharge: 0,
+  });
+  const [moderatorDetails, setModeratorDetails] = useState<any[]>([]);
 
   useEffect(() => {
-    async function checkAdmin() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const email = session?.user?.email;
-      
-      if (email) {
-        const { data } = await supabase
-          .from("authorized_personnel")
-          .select("access_type")
-          .eq("email", email)
-          .single();
+    async function fetchDashboardData() {
+      try {
+        setLoading(true);
+        
+        // আপনার অর্ডার টেবিল থেকে ডাটা ফেচ করা (টেবিলের নাম 'orders' না হলে আপনার টেবিল নাম দিয়ে বদল করে নেবেন)
+        const { data: orders, error } = await supabase
+          .from("orders")
+          .select("*");
 
-        if (data && data.access_type !== "Full Admin") {
-          // হ্যান্ডেল এক্সেস
+        if (error) throw error;
+
+        if (orders) {
+          let totalOrd = orders.length;
+          let profit = 0;
+          let cost = 0;
+          let delivery = 0;
+          const modMap: { [key: string]: { count: number; sales: number } } = {};
+
+          orders.forEach((order) => {
+            // ফিল্ডগুলোর নাম আপনার ডাটাবেস অনুযায়ী অ্যাডজাস্ট করে নিতে পারেন
+            profit += Number(order.profit || 0);
+            cost += Number(order.cost || 0);
+            delivery += Number(order.delivery_charge || 0);
+
+            // মডারেটর অনুযায়ী অর্ডার ডিটেলস হিসাব করা
+            const moderator = order.moderator_name || order.moderator || "Unknown";
+            if (!modMap[moderator]) {
+              modMap[moderator] = { count: 0, sales: 0 };
+            }
+            modMap[moderator].count += 1;
+            modMap[moderator].sales += Number(order.total_amount || order.price || 0);
+          });
+
+          setStats({
+            totalOrders: totalOrd,
+            totalProfit: profit,
+            totalCost: cost,
+            totalDeliveryCharge: delivery,
+          });
+
+          const modArray = Object.keys(modMap).map((key) => ({
+            name: key,
+            totalOrders: modMap[key].count,
+            totalSales: modMap[key].sales,
+          }));
+
+          setModeratorDetails(modArray);
         }
+      } catch (err) {
+        console.error("Error fetching dashboard stats:", err);
+      } finally {
+        setLoading(false);
       }
     }
-    checkAdmin();
+
+    fetchDashboardData();
   }, []);
 
-  const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: "🏠" },
-    { name: "Orders History", href: "/orders-history", icon: "📄" },
-    { name: "Fraud Check", href: "/fraud-check", icon: "🛡️" },
-    { name: "Team Management", href: "/team-management", icon: "👥" },
-    { name: "Expenses", href: "/expenses", icon: "💰" },
-    { name: "Settings", href: "/settings", icon: "⚙️" },
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-lg font-semibold text-gray-600 animate-pulse">Loading Dashboard...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Permanent Fixed Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl">
-        <div>
-          <div className="mb-8 px-2">
-            <h1 className="text-2xl font-bold tracking-wider">Moto Charm BD</h1>
-            <div className="mt-2 inline-block px-2.5 py-1 rounded bg-blue-600 text-[10px] font-bold uppercase tracking-widest text-white">
-              ADMINISTRATOR
-            </div>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
+        <span className="text-sm text-gray-500">Welcome back, Admin</span>
+      </div>
+
+      {/* Top Stat Cards: Profit, Cost, Delivery Charge, Total Order */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Total Orders */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Total Orders</p>
+            <h3 className="text-3xl font-bold text-gray-800 mt-1">{stats.totalOrders}</h3>
           </div>
-
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <LinkComponent
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${
-                    isActive 
-                      ? "bg-blue-600 text-white shadow-md" 
-                      : "text-gray-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <span className="text-lg">{item.icon}</span>
-                  {item.name}
-                </LinkComponent>
-              );
-            })}
-          </nav>
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl text-xl">📦</div>
         </div>
 
-        <div className="px-4 py-3 text-xs text-gray-500 border-t border-slate-800">
-          Moto Charm BD Admin Panel
+        {/* Total Profit */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Total Profit</p>
+            <h3 className="text-3xl font-bold text-emerald-600 mt-1">৳ {stats.totalProfit.toLocaleString()}</h3>
+          </div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xl">📈</div>
         </div>
-      </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-6 bg-gray-100">
-        {children}
-      </main>
+        {/* Total Cost */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Total Cost</p>
+            <h3 className="text-3xl font-bold text-rose-600 mt-1">৳ {stats.totalCost.toLocaleString()}</h3>
+          </div>
+          <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-xl">📉</div>
+        </div>
+
+        {/* Delivery Charge */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Delivery Charge</p>
+            <h3 className="text-3xl font-bold text-amber-600 mt-1">৳ {stats.totalDeliveryCharge.toLocaleString()}</h3>
+          </div>
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl text-xl">🚚</div>
+        </div>
+      </div>
+
+      {/* Moderator Order Details Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">Moderator Order Details</h3>
+        
+        {moderatorDetails.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">No moderator data found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Moderator Name</th>
+                  <th className="py-3 px-4">Total Orders Handled</th>
+                  <th className="py-3 px-4">Total Sales Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
+                {moderatorDetails.map((mod, index) => (
+                  <tr key={index} className="hover:bg-gray-50/50 transition">
+                    <td className="py-3.5 px-4 font-medium text-gray-800">{mod.name}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-full font-semibold text-xs">
+                        {mod.totalOrders} Orders
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-gray-800">৳ {mod.totalSales.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
