@@ -1,76 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-export default function Sidebar() {
-  const [userRole, setUserRole] = useState<string>("Loading...");
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
 
-  useEffect(() => {
-    async function checkUserRole() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const email = session?.user?.email || "";
-
-        if (!email) {
-          setUserRole("Viewer");
-          return;
-        }
-
-        // ডাটাবেস থেকে ইউজারের সঠিক রোল ফেচ করা
-        const { data, error } = await supabase
-          .from("authorized_personnel")
-          .select("access_type")
-          .eq("email", email)
-          .single();
-
-        if (data?.access_type) {
-          setUserRole(data.access_type); // যেমন: "Full Admin", "Editor", "Viewer"
-        } else if (email.toLowerCase() === "motocharmbdofficial@gmail.com") {
-          setUserRole("Full Admin");
-        } else {
-          setUserRole("Viewer");
-        }
-      } catch (err) {
-        console.error("Role check error:", err);
-        setUserRole("Viewer");
-      }
-    }
-
-    checkUserRole();
-  }, []);
+  const navItems = [
+    { name: "Dashboard", href: "/dashboard", icon: "🏠" },
+    { name: "Orders History", href: "/orders-history", icon: "📄" },
+    { name: "Fraud Check", href: "/fraud-check", icon: "🛡️" },
+    { name: "Team Management", href: "/team-management", icon: "👥" },
+  ];
 
   return (
-    <aside className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col justify-between">
-      <div>
-        <h1 className="text-xl font-bold mb-4">Moto Charm BD</h1>
-
-        {/* ডাইনামিক রোল ব্যাজ */}
-        <div className="mb-6 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-semibold uppercase tracking-wider text-amber-400">
-          {userRole}
+    <div className="flex min-h-screen bg-gray-100">
+      {/* Sidebar */}
+      <aside className="w-64 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-lg">
+        <div>
+          <h1 className="text-2xl font-bold tracking-wider mb-8 px-2">Moto Charm BD</h1>
+          <nav className="space-y-2">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${
+                    isActive ? "bg-blue-600 text-white shadow" : "text-gray-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  <span className="text-lg">{item.icon}</span>
+                  {item.name}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
+        <div className="px-4 py-3 text-xs text-gray-500 border-t border-slate-800">
+          Moto Charm BD Admin Panel
+        </div>
+      </aside>
 
-        {/* ন্যাভিগেশন লিংকস */}
-        <nav className="space-y-2">
-          <Link href="/" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg">
-            🏠 Dashboard
-          </Link>
-          <Link href="/orders-history" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg">
-            📄 Orders History
-          </Link>
-          <Link href="/fraud-check" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg">
-            🛡️ Fraud Check
-          </Link>
-          
-          {/* যদি ফুল অ্যাডমিন হয় তবেই টিম ম্যানেজমেন্ট বা পার্সোনেল লিস্ট দেখাবে */}
-          {userRole === "Full Admin" && (
-            <Link href="/team-management" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded-lg text-purple-400">
-              👥 Team Management
-            </Link>
-          )}
-        </nav>
-      </div>
-    </aside>
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
   );
 }
