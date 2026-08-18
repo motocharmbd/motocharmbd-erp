@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import Link from "next/navigation"; // অথবা 'next/link' আপনার ইমপোর্ট অনুযায়ী
 import LinkComponent from "next/link";
 import { usePathname } from "next/navigation";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = useState(true); // বাই-ডিফল্ট ফুল এক্সেস রাখা হলো
+  const [, setIsAdmin] = useState(true);
 
   useEffect(() => {
     async function checkAdmin() {
@@ -16,7 +15,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const email = session?.user?.email;
       
       if (email) {
-        // ডাটাবেস চেক করবে অথবা আপনার ইমেইল হলে সরাসরি ফুল অ্যাডমিন বানিয়ে দেবে
         const { data } = await supabase
           .from("authorized_personnel")
           .select("access_type")
@@ -24,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .single();
 
         if (data && data.access_type !== "Full Admin") {
-          // যদি ডাটাবেসে অন্য কিছু থাকে, আপনি চাইলে এখানে হ্যান্ডেল করতে পারেন
+          // হ্যান্ডেল এক্সেস
         }
       }
     }
@@ -42,12 +40,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Permanent Fixed Sidebar - পেজ বদলালেও এটি সবসময় বামপাশে ফিক্সড থাকবে */}
+      {/* Permanent Fixed Sidebar */}
       <aside className="w-64 flex-shrink-0 bg-slate-900 text-white flex flex-col justify-between p-4 shadow-xl">
         <div>
           <div className="mb-8 px-2">
             <h1 className="text-2xl font-bold tracking-wider">Moto Charm BD</h1>
-            {/* মডারেটর লেখা চিরতরে গায়েব, এখন শুধু অ্যাডমিন দেখাবে */}
             <div className="mt-2 inline-block px-2.5 py-1 rounded bg-blue-600 text-[10px] font-bold uppercase tracking-widest text-white">
               ADMINISTRATOR
             </div>
@@ -79,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Main Content - সাইডবার ঠিক রেখে শুধু ডানপাশের কন্টেন্ট বদলাবে */}
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-6 bg-gray-100">
         {children}
       </main>
