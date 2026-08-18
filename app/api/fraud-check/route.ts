@@ -1,87 +1,123 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-function toNumber(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+function normalizePhone(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("880") && digits.length === 13) return `0${digits.slice(3)}`;
+  return digits;
 }
 
-function findSummary(value: any): any | null {
-  if (!value || typeof value !== 'object') return null;
-  if (value.summary && typeof value.summary === 'object') return value.summary;
-  for (const child of Object.values(value)) {
-    const found = findSummary(child);
-    if (found) return found;
-  }
-  return null;
+function normalizeStatus(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
 }
 
-function findSuccessRatio(value: any): number | null {
-  if (!value || typeof value !== 'object') return null;
-  const ratio = Number(value.success_ratio);
-  if (Number.isFinite(ratio)) return ratio;
-  for (const child of Object.values(value)) {
-    const found = findSuccessRatio(child);
-    if (found !== null) return found;
-  }
-  return null;
+function isDelivered(status: string) {
+  return ["delivered", "partial_delivered", "completed", "success"].includes(status);
+}
+
+function isCancelled(status: string) {
+  return ["cancelled", "canceled", "returned", "return", "failed", "rejected"].includes(status);
+}
+
+function courierName(row: any) {
+  const raw = row?.courier ?? row?.courier_name ?? row?.delivery_courier ?? row?.shipping_courier ?? "";
+  const value = String(raw).trim().toLowerCase();
+  if (value.includes("stead")) return "Steadfast";
+  if (value.includes("pathao")) return "Pathao";
+  if (value.includes("carry")) return "CarryBee";
+  return raw ? String(raw) : "Our ERP";
 }
 
 export async function POST(request: Request) {
   try {
     const { phoneNumber } = await request.json();
+    const phone = normalizePhone(phoneNumber);
 
-    if (!phoneNumber) {
-      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+    if (!/^01\d{9}$/.test(phone)) {
+      return NextResponse.json({ error: "Valid 11 digit phone number is required" }, { status: 400 });
     }
 
-    const token = process.env.BD_COURIER_BEARER_TOKEN;
-    if (!token) {
-      console.error('BD_COURIER_BEARER_TOKEN is not configured');
-      return NextResponse.json(
-        { error: 'Fraud checker is not configured. Add BD_COURIER_BEARER_TOKEN to the deployment environment.' },
-        { status: 503, headers: { 'Cache-Control': 'no-store' } }
-      );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: "ERP database is not configured", score: 0 }, { status: 503 });
     }
 
-    const apiResponse = await fetch('https://api.bdcourier.com/courier-check', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ phone: String(phoneNumber).trim() }),
-      cache: 'no-store',
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const data = await apiResponse.json().catch(() => ({}));
+    // Third-party fraud provider is intentionally not used anymore.
+    // The score is calculated only from Moto Charm BD's own stored customer history.
+    const { data: orders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("phone", phone)
+      .order("order_date", { ascending: false });
 
-    if (!apiResponse.ok) {
-      console.error('BD Courier API returned', apiResponse.status, data);
-      return NextResponse.json(
-        { error: 'BD Courier API authentication/request failed', upstreamStatus: apiResponse.status },
-        { status: apiResponse.status, headers: { 'Cache-Control': 'no-store' } }
-      );
+    if (error) {
+      console.error("Own ERP fraud history query failed:", error);
+      return NextResponse.json({ error: error.message, score: 0 }, { status: 500 });
     }
 
-    const summary = findSummary(data);
-    const ratio = findSuccessRatio(data);
-    const total = toNumber(summary?.total_parcel);
-    const successful = toNumber(summary?.success_parcel);
-    const score = ratio !== null
-      ? Math.max(0, Math.min(100, Math.round(ratio)))
-      : total > 0
-        ? Math.max(0, Math.min(100, Math.round((successful / total) * 100)))
+    const rows = orders || [];
+    const total = rows.length;
+    const delivered = rows.filter((row: any) => isDelivered(normalizeStatus(row.status))).length;
+    const cancelled = rows.filter((row: any) => isCancelled(normalizeStatus(row.status))).length;
+    const processing = Math.max(0, total - delivered - cancelled);
+    const score = total > 0 ? Math.round((delivered / total) * 100) : 0;
+
+    const byCourier: Record<string, { name: string; total_parcel: number; success_parcel: number; cancelled_parcel: number; success_ratio: number }> = {};
+    for (const row of rows) {
+      const name = courierName(row);
+      if (!byCourier[name]) {
+        byCourier[name] = { name, total_parcel: 0, success_parcel: 0, cancelled_parcel: 0, success_ratio: 0 };
+      }
+      const bucket = byCourier[name];
+      const status = normalizeStatus(row.status);
+      bucket.total_parcel += 1;
+      if (isDelivered(status)) bucket.success_parcel += 1;
+      if (isCancelled(status)) bucket.cancelled_parcel += 1;
+    }
+
+    Object.values(byCourier).forEach((bucket) => {
+      bucket.success_ratio = bucket.total_parcel
+        ? Math.round((bucket.success_parcel / bucket.total_parcel) * 10000) / 100
         : 0;
-
-    return NextResponse.json({ ...data, score }, {
-      status: 200,
-      headers: { 'Cache-Control': 'no-store' },
     });
-  } catch (error) {
-    console.error('BD Courier API Error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch data from BD Courier', score: 0 },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
-    );
+
+    const riskLevel = total === 0
+      ? "new"
+      : score >= 80
+        ? "safe"
+        : score >= 60
+          ? "low"
+          : score >= 40
+            ? "medium"
+            : "high";
+
+    return NextResponse.json({
+      status: "success",
+      source: "motocharmbd-own-erp",
+      phone,
+      score,
+      risk_level: riskLevel,
+      data: {
+        summary: {
+          total_parcel: total,
+          success_parcel: delivered,
+          cancelled_parcel: cancelled,
+          processing_parcel: processing,
+          success_ratio: score,
+        },
+        ...byCourier,
+      },
+      reports: [],
+      note: "Third-party fraud API disabled. This result uses only customer history stored in Moto Charm BD ERP.",
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error: any) {
+    console.error("Own ERP fraud check error:", error);
+    return NextResponse.json({ error: error?.message || "Fraud check failed", score: 0 }, { status: 500 });
   }
 }
