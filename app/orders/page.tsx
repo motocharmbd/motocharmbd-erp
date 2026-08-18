@@ -22,11 +22,11 @@ export default function OrdersPage() {
   const [orderDate, setOrderDate] = useState(getTodayDhaka());
   const [size, setSize] = useState("11 Inch");
   const [qty, setQty] = useState("1");
-  const [productPrice, setProductPrice] = useState("");
-  const [productCostInput, setProductCostInput] = useState("");
+  const [productPrice, setProductPrice] = useState("250");
+  const [productCostInput, setProductCostInput] = useState("30");
   const [giftBox, setGiftBox] = useState(false);
   const [confirmedBy, setConfirmedBy] = useState("");
-  const [deliveryCharge, setDeliveryCharge] = useState("60");
+  const [deliveryCharge, setDeliveryCharge] = useState("115");
   const [boostCost, setBoostCost] = useState("0");
   const [advancedPaid, setAdvancedPaid] = useState("0");
   const [fraudLoading, setFraudLoading] = useState(false);
@@ -141,7 +141,7 @@ export default function OrdersPage() {
     }
 
     alert("Order Saved Successfully");
-    setCustomerName(""); setPhone(""); setAddress(""); setOrderDate(getTodayDhaka()); setSize("11 Inch"); setQty("1"); setProductPrice(""); setProductCostInput(""); setGiftBox(false); setConfirmedBy(""); setDeliveryCharge("60"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
+    setCustomerName(""); setPhone(""); setAddress(""); setOrderDate(getTodayDhaka()); setSize("11 Inch"); setQty("1"); setProductPrice("250"); setProductCostInput("30"); setGiftBox(false); setConfirmedBy(""); setDeliveryCharge("115"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
   }
 
   return (
