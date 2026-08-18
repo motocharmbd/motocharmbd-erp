@@ -1,0 +1,57 @@
+// This file is a ready template for the new 3-courier fraud checker.
+// IMPORTANT: replace the existing app/api/fraud-check/route.ts with the finalized version only after
+// confirming the exact API request/response schemas from your Steadfast, Pathao and CarryBee docs.
+// Secrets must remain in Vercel environment variables and must never be hard-coded here.
+
+import { NextResponse } from 'next/server';
+
+const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
+const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+function scoreFromStats(total: unknown, delivered: unknown, cancelled: unknown) {
+  const t = num(total), d = num(delivered), c = num(cancelled);
+  if (t <= 0) return 0;
+  // Successful delivery ratio: delivered / (delivered + cancelled), with neutral 0 when no history exists.
+  return clamp((d / Math.max(1, d + c)) * 100);
+}
+
+async function callCourier(url: string, init: RequestInit) {
+  const response = await fetch(url, { ...init, cache: 'no-store' });
+  const data = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, data };
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const phoneNumber = String(body?.phoneNumber || '').trim();
+    if (!phoneNumber) return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+
+    // TODO: Wire these three functions to the exact official APIs documented by your accounts.
+    // Do NOT use any third-party fraud-checking service here.
+    // Required Vercel env vars:
+    // STEADFAST_API_KEY / STEADFAST_SECRET_KEY
+    // PATHAO_CLIENT_ID / PATHAO_CLIENT_SECRET / PATHAO_REFRESH_TOKEN
+    // CARRYBEE_API_KEY / CARRYBEE_API_SECRET
+
+    const credentialsPresent = {
+      steadfast: Boolean(process.env.STEADFAST_API_KEY),
+      pathao: Boolean(process.env.PATHAO_CLIENT_ID && process.env.PATHAO_CLIENT_SECRET && process.env.PATHAO_REFRESH_TOKEN),
+      carrybee: Boolean(process.env.CARRYBEE_API_KEY),
+    };
+
+    return NextResponse.json({
+      score: 0,
+      phone: phoneNumber,
+      couriers: {
+        steadfast: { configured: credentialsPresent.steadfast, delivered: 0, cancelled: 0, total: 0 },
+        pathao: { configured: credentialsPresent.pathao, delivered: 0, cancelled: 0, total: 0 },
+        carrybee: { configured: credentialsPresent.carrybee, delivered: 0, cancelled: 0, total: 0 },
+      },
+      message: 'Courier credentials detected. Exact courier API adapters must be wired to the official response schemas before production scoring.',
+    }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    console.error('Courier fraud checker error:', error);
+    return NextResponse.json({ error: 'Fraud checker failed', score: 0 }, { status: 500 });
+  }
+}
