@@ -28,7 +28,7 @@ export default function DashboardPage() {
         if (error) throw error;
 
         if (orders && orders.length > 0) {
-          // আপনার ডাটাবেসের প্রথম অর্ডারটি কনসোলে প্রিন্ট করে দেখে নিতে পারেন ফিল্ডগুলোর আসল নাম কী
+          // আপনার ডাটাবেসের প্রথম অর্ডারটি কনসোলে প্রিন্ট করে দেখতে পারেন কলামগুলোর আসল নাম কী
           console.log("Full Order Row Data:", orders[0]);
 
           let totalOrd = orders.length;
@@ -49,7 +49,6 @@ export default function DashboardPage() {
               cancelledCount++;
             }
 
-            // বিভিন্ন সম্ভাব্য কলামের নাম চেক করা হচ্ছে যাতে Cost এবং Commission মিস না হয়
             const orderCost = Number(
               order.cost ?? 
               order.buying_price ?? 
@@ -71,11 +70,13 @@ export default function DashboardPage() {
               0
             );
 
+            // সব ধরনের সম্ভাব্য কমিশনের কলামের নাম চেক করা হচ্ছে
             const orderCommission = Number(
               order.commission ?? 
               order.sakin_commission ?? 
               order.mod_commission ?? 
               order.comission ?? 
+              order.moderator_commission ?? 
               0
             );
 
@@ -84,15 +85,22 @@ export default function DashboardPage() {
             delivery += orderDelivery;
             commission += orderCommission;
 
-            // মডারেটরের নাম বিভিন্ন কলাম থেকে খোঁজা হচ্ছে
-            const moderator = String(
+            // মডারেটরের নামের সম্ভাব্য কলামগুলো চেক করা হচ্ছে (যাতে সাকিন বা অন্য কারো নাম Unknown না দেখায়)
+            let moderator = String(
               order.moderator_name ?? 
               order.moderator ?? 
               order.user_name ?? 
               order.created_by ?? 
               order.agent ?? 
+              order.staff ?? 
+              order.name ?? 
               "Unknown"
-            );
+            ).trim();
+
+            // যদি মডারেটর ফিল্ড খালি থাকে
+            if (!moderator || moderator === "") {
+              moderator = "Unknown";
+            }
 
             if (!modMap[moderator]) {
               modMap[moderator] = { count: 0, sales: 0, commission: 0 };
