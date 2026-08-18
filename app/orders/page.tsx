@@ -42,6 +42,8 @@ export default function OrdersPage() {
   const boost = Number(boostCost) || 0;
   const advance = Number(advancedPaid) || 0;
 
+  // Gift box is only a Yes/No flag. It never adds money to cost, COD, or profit.
+  // Selling price is the customer's total amount. Costs affect profit only, never COD.
   const totalCost = productCost + delivery + boost;
   const finalDue = Math.max(0, sellingAmount - advance);
   const profit = sellingAmount - totalCost;
@@ -84,7 +86,7 @@ export default function OrdersPage() {
           body: JSON.stringify({ phoneNumber: cleanPhone }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data?.message || data?.error || "Fraud check failed");
+        if (!response.ok) throw new Error(data?.message || "Fraud check failed");
         if (!cancelled) setFraudResult(data);
       } catch (error: any) {
         if (!cancelled) { console.error(error); setFraudError(error?.message || "Unable to check fraud status"); }
@@ -126,6 +128,7 @@ export default function OrdersPage() {
     }]).select("id").single();
     if (error) { alert(error.message); return; }
 
+    // Keep the existing Order History assignment system in sync.
     if (savedOrder?.id && confirmedBy) {
       try {
         const saved = localStorage.getItem("mcb_order_confirmed_by");
@@ -137,28 +140,7 @@ export default function OrdersPage() {
       }
     }
 
-    // Automatically create the shipment in Steadfast after the ERP order is saved.
-    // Credentials stay server-side; the returned tracking code is written back to this order.
-    let courierMessage = "Steadfast tracking created automatically.";
-    try {
-      const courierResponse = await fetch("/api/steadfast", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: savedOrder?.id }),
-      });
-      const courierData = await courierResponse.json().catch(() => ({}));
-      if (!courierResponse.ok || !courierData?.success) {
-        console.error("Steadfast auto-create failed:", courierData);
-        courierMessage = "Order saved, but Steadfast tracking could not be created automatically. Add tracking from Order History if needed.";
-      } else if (courierData?.tracking_code) {
-        courierMessage = `Steadfast tracking created: ${courierData.tracking_code}`;
-      }
-    } catch (error) {
-      console.error("Steadfast auto-create request failed:", error);
-      courierMessage = "Order saved, but Steadfast tracking could not be created automatically. Add tracking from Order History if needed.";
-    }
-
-    alert(`Order Saved Successfully\n\n${courierMessage}`);
+    alert("Order Saved Successfully");
     setCustomerName(""); setPhone(""); setAddress(""); setOrderDate(getTodayDhaka()); setSize("11 Inch"); setQty("1"); setProductPrice(""); setProductCostInput(""); setGiftBox(false); setConfirmedBy(""); setDeliveryCharge("60"); setBoostCost("0"); setAdvancedPaid("0"); setFraudResult(null); setFraudError(""); setPreviousOrders([]);
   }
 
