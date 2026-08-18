@@ -27,25 +27,36 @@ export default function TeamManagementPage() {
   async function fetchUserDataAndPersonnel() {
     setLoading(true);
     try {
+      // ১. Supabase থেকে বর্তমান লগইন করা ইউজারের সেশন আনুন
       const { data: { session } } = await supabase.auth.getSession();
-      const email = session?.user?.email || "sakinmahmud129@gmail.com"; 
+      const email = session?.user?.email || ""; 
       setCurrentUserEmail(email);
 
-      const { data: profileData } = await supabase
-        .from("authorized_personnel")
-        .select("access_type")
-        .eq("email", email)
-        .single();
-
-      const userRole = profileData?.access_type || "Viewer";
-      setCurrentUserRole(userRole);
-
+      // ২. সমস্ত পার্সোনেল লিস্ট ফেচ করুন
       const { data: list, error } = await supabase
         .from("authorized_personnel")
         .select("*");
 
       if (error) throw error;
-      setPersonnelList(list || []);
+      const fetchedList = list || [];
+      setPersonnelList(fetchedList);
+
+      // ৩. ডাটাবেসের লিস্ট থেকে বর্তমান ইউজারের রোল সরাসরি খুঁজে বের করুন
+      const matchedUser = fetchedList.find(
+        (p) => p.email.toLowerCase() === email.toLowerCase()
+      );
+
+      if (matchedUser) {
+        setCurrentUserRole(matchedUser.access_type);
+      } else {
+        // যদি ডাটাবেস টেবিলে ইমেইলটি সরাসরি না পাওয়া যায়, তখন ফিক্সড অ্যাডমিন ইমেইল চেক করবে
+        if (email.toLowerCase() === "motocharmbdofficial@gmail.com") {
+          setCurrentUserRole("Full Admin");
+        } else {
+          setCurrentUserRole("Viewer");
+        }
+      }
+
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -113,7 +124,12 @@ export default function TeamManagementPage() {
   return (
     <div className="p-6">
       <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-100">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Authorized Personnel List</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-800">Authorized Personnel List</h2>
+          <span className="text-xs bg-gray-100 px-3 py-1 rounded-full text-gray-600">
+            Logged in as: <strong>{currentUserEmail}</strong> ({currentUserRole})
+          </span>
+        </div>
         
         {currentUserRole !== "Full Admin" && (
           <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
