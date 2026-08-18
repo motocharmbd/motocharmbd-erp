@@ -34,10 +34,6 @@ function money(val: any): string {
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [confirmedByOrderId, setConfirmedByOrderId] = useState<Record<string, string>>({});
-  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
-
   const [stats, setStats] = useState({
     totalOrders: 0,
     deliveredOrders: 0,
@@ -53,12 +49,10 @@ export default function DashboardPage() {
       try {
         setLoading(true);
 
-        // Load confirmation mapping from localStorage
         let assignments: Record<string, string> = {};
         try {
           const saved = localStorage.getItem("mcb_order_confirmed_by");
           if (saved) assignments = JSON.parse(saved);
-          setConfirmedByOrderId(assignments);
         } catch (e) {
           console.error("Failed to load confirmation assignments", e);
         }
@@ -71,12 +65,9 @@ export default function DashboardPage() {
         if (error) throw error;
 
         if (dbOrders) {
-          // Filter only orders confirmed by "Sakin"
           const sakinOrders = dbOrders.filter(
             (order) => assignments[String(order.id)] === CURRENT_MODERATOR_NAME
           );
-
-          setOrders(sakinOrders);
 
           let deliveredCount = 0;
           let cancelledCount = 0;
@@ -103,7 +94,6 @@ export default function DashboardPage() {
             profit += tAmount - totalItemCost;
           });
 
-          // Commission calculation: ৳15 per non-cancelled order
           const validCommissionOrders = sakinOrders.filter(
             (o) => String(o.status || "").toLowerCase() !== "cancelled"
           );
@@ -135,14 +125,6 @@ export default function DashboardPage() {
         <div className="text-lg font-semibold text-gray-600 animate-pulse">Loading Dashboard...</div>
       </div>
     );
-  }
-
-  function statusClass(status: string) {
-    const s = String(status || "").toLowerCase();
-    if (s === "delivered") return "bg-green-100 text-green-700";
-    if (s === "cancelled") return "bg-red-100 text-red-700";
-    if (s.includes("return")) return "bg-orange-100 text-orange-700";
-    return "bg-blue-100 text-blue-700";
   }
 
   return (
@@ -204,98 +186,6 @@ export default function DashboardPage() {
           <div className="p-3 bg-amber-50 text-amber-600 rounded-xl text-xl">🚚</div>
         </div>
       </div>
-
-      {/* Moderator Orders Detailed Table Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 overflow-hidden">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Sakin's Confirmed Order Details</h3>
-        
-        {orders.length === 0 ? (
-          <p className="text-gray-500 text-sm py-4">No confirmed orders found for Sakin.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">
-                  <th className="py-3 px-4">Invoice No</th>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Customer Name</th>
-                  <th className="py-3 px-4">Phone</th>
-                  <th className="py-3 px-4">Size & Qty</th>
-                  <th className="py-3 px-4">Amount</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
-                {orders.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50/50 transition">
-                    <td className="py-3.5 px-4 font-semibold text-blue-600">
-                      MCB-{String(item.id).slice(0, 6).toUpperCase()}
-                    </td>
-                    <td className="py-3.5 px-4">{item.order_date || "-"}</td>
-                    <td className="py-3.5 px-4 font-medium text-gray-800">{item.customer_name || "-"}</td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">{item.phone || "-"}</td>
-                    <td className="py-3.5 px-4">{item.size || "-"} ({n(item.qty)})</td>
-                    <td className="py-3.5 px-4 font-semibold text-gray-800">{money(item.total_amount)}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`inline-block rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(item.status)}`}>
-                        {item.status || "Pending"}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => setViewingOrder(item)}
-                        className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition"
-                      >
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Order Details Modal */}
-      {viewingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between border-b pb-3">
-              <h2 className="text-xl font-bold text-gray-800">Order Information</h2>
-              <button onClick={() => setViewingOrder(null)} className="text-2xl text-gray-500 hover:text-black">×</button>
-            </div>
-            <div className="space-y-3 text-sm">
-              {[
-                ["Invoice No", `MCB-${String(viewingOrder.id).slice(0, 6).toUpperCase()}`],
-                ["Date", viewingOrder.order_date],
-                ["Customer Name", viewingOrder.customer_name],
-                ["Phone", viewingOrder.phone],
-                ["Address", viewingOrder.address],
-                ["Size & Qty", `${viewingOrder.size} (${n(viewingOrder.qty)})`],
-                ["Total Amount", money(viewingOrder.total_amount)],
-                ["Advanced Paid", money(viewingOrder.advance_amount)],
-                ["Status", viewingOrder.status],
-                ["Tracking Code", viewingOrder.tracking_code || "N/A"],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-gray-50 pb-2">
-                  <span className="text-gray-500">{label}:</span>
-                  <span className="font-medium text-gray-800">{value}</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 flex items-center justify-end border-t pt-4">
-              <button
-                onClick={() => setViewingOrder(null)}
-                className="rounded-xl bg-gray-800 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-900 transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
