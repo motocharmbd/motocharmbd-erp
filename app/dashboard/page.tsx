@@ -15,6 +15,7 @@ type Order = {
   customer_name?: string;
   phone?: string;
   status?: string;
+  tracking_code?: string;
 };
 
 const COMMISSION_PER_ORDER = 15;
@@ -24,6 +25,19 @@ const n = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+
+const normalizedStatus = (value: unknown) => String(value || "").trim().toLowerCase();
+const isDeliveredStatus = (value: unknown) => ["delivered", "partial_delivered"].includes(normalizedStatus(value));
+const isCancelledStatus = (value: unknown) => normalizedStatus(value) === "cancelled";
+
+function mapSteadfastStatus(value: unknown): string {
+  const status = normalizedStatus(value);
+  if (["delivered", "partial_delivered"].includes(status)) return "Delivered";
+  if (status === "cancelled") return "Cancelled";
+  if (status.includes("return")) return "Returned";
+  if (["pending", "delivered_approval_pending", "partial_delivered_approval_pending", "cancelled_approval_pending", "unknown_approval_pending", "hold", "in_review", "unknown"].includes(status)) return "Processing";
+  return "";
+}
 
 export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -63,16 +77,45 @@ export default function DashboardPage() {
       return;
     }
 
-    setOrders((data || []) as Order[]);
+    const fetched = (data || []) as Order[];
+    setOrders(fetched);
+    void syncTrackingStatuses(fetched);
+  }
+
+  async function syncTrackingStatuses(currentOrders: Order[]) {
+    const updated = [...currentOrders];
+    let changed = false;
+
+    for (let index = 0; index < updated.length; index += 1) {
+      const item = updated[index];
+      const trackingCode = String(item.tracking_code || "").trim();
+      if (!trackingCode) continue;
+
+      try {
+        const response = await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingCode)}`, {
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.delivery_status) continue;
+
+        const nextStatus = mapSteadfastStatus(payload.delivery_status);
+        if (!nextStatus || normalizedStatus(item.status) === normalizedStatus(nextStatus)) continue;
+
+        changed = true;
+        updated[index] = { ...item, status: nextStatus };
+        await supabase.from("orders").update({ status: nextStatus }).eq("id", item.id);
+      } catch (error) {
+        console.error("Dashboard tracking sync failed", trackingCode, error);
+      }
+    }
+
+    if (changed) setOrders(updated);
   }
 
   const totalOrdersCount = orders.length;
-  const deliveredOrdersCount = orders.filter((item) => String(item.status || "").toLowerCase() === "delivered").length;
-  const cancelledOrdersCount = orders.filter((item) => String(item.status || "").toLowerCase() === "cancelled").length;
-  const processingOrdersCount = orders.filter((item) => {
-    const status = String(item.status || "").toLowerCase();
-    return status !== "delivered" && status !== "cancelled";
-  }).length;
+  const deliveredOrdersCount = orders.filter((item) => isDeliveredStatus(item.status)).length;
+  const cancelledOrdersCount = orders.filter((item) => isCancelledStatus(item.status)).length;
+  const processingOrdersCount = orders.filter((item) => !isDeliveredStatus(item.status) && !isCancelledStatus(item.status)).length;
 
   const totalSalesAmount = orders.reduce((sum, item) => sum + n(item.total_amount), 0);
   const totalDeliveryCharge = orders.reduce((sum, item) => sum + n(item.delivery_charge), 0);
@@ -80,12 +123,8 @@ export default function DashboardPage() {
 
   const sakinOrders = orders.filter((item) => confirmedByOrderId[String(item.id)] === "Sakin");
   const sakinTotalOrders = sakinOrders.length;
-  const sakinDeliveredOrders = sakinOrders.filter(
-    (item) => String(item.status || "").toLowerCase() === "delivered"
-  ).length;
-  const sakinCancelledOrders = sakinOrders.filter(
-    (item) => String(item.status || "").toLowerCase() === "cancelled"
-  ).length;
+  const sakinDeliveredOrders = sakinOrders.filter((item) => isDeliveredStatus(item.status)).length;
+  const sakinCancelledOrders = sakinOrders.filter((item) => isCancelledStatus(item.status)).length;
   const sakinCommission = Math.max(0, sakinTotalOrders - sakinCancelledOrders) * COMMISSION_PER_ORDER;
 
   const chartDataMap: Record<string, { date: string; orders: number; sales: number }> = {};
