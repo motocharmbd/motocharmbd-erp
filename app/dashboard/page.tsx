@@ -3,8 +3,41 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+type Order = {
+  id: number;
+  order_date: string;
+  customer_name: string;
+  phone: string;
+  address: string;
+  size: string;
+  qty: number;
+  total_amount: number;
+  advance_amount: number;
+  status: string;
+  product_cost?: number;
+  delivery_charge?: number;
+  boost_cost?: number;
+  tracking_code?: string;
+};
+
+const CURRENT_MODERATOR_NAME = "Sakin";
+const COMMISSION_PER_ORDER = 15;
+
+function n(val: any): number {
+  const num = Number(val);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function money(val: any): string {
+  return `৳${n(val).toLocaleString("en-BD")}`;
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [confirmedByOrderId, setConfirmedByOrderId] = useState<Record<string, string>>({});
+  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+
   const [stats, setStats] = useState({
     totalOrders: 0,
     deliveredOrders: 0,
@@ -14,120 +47,77 @@ export default function DashboardPage() {
     totalDeliveryCharge: 0,
     totalCommission: 0,
   });
-  const [moderatorDetails, setModeratorDetails] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchDashboardData() {
       try {
         setLoading(true);
-        
-        const { data: orders, error } = await supabase
+
+        // Load confirmation mapping from localStorage
+        let assignments: Record<string, string> = {};
+        try {
+          const saved = localStorage.getItem("mcb_order_confirmed_by");
+          if (saved) assignments = JSON.parse(saved);
+          setConfirmedByOrderId(assignments);
+        } catch (e) {
+          console.error("Failed to load confirmation assignments", e);
+        }
+
+        const { data: dbOrders, error } = await supabase
           .from("orders")
-          .select("*");
+          .select("*")
+          .order("id", { ascending: false });
 
         if (error) throw error;
 
-        if (orders && orders.length > 0) {
-          // আপনার ডাটাবেসের প্রথম অর্ডারটি কনসোলে প্রিন্ট করে দেখতে পারেন কলামগুলোর আসল নাম কী
-          console.log("Full Order Row Data:", orders[0]);
+        if (dbOrders) {
+          // Filter only orders confirmed by "Sakin"
+          const sakinOrders = dbOrders.filter(
+            (order) => assignments[String(order.id)] === CURRENT_MODERATOR_NAME
+          );
 
-          let totalOrd = orders.length;
+          setOrders(sakinOrders);
+
           let deliveredCount = 0;
           let cancelledCount = 0;
           let profit = 0;
           let cost = 0;
           let delivery = 0;
-          let commission = 0;
-          
-          const modMap: { [key: string]: { count: number; sales: number; commission: number } } = {};
 
-          orders.forEach((order) => {
+          sakinOrders.forEach((order) => {
             const status = String(order.status || "").toLowerCase();
-            if (status.includes("deliver")) {
+            if (["delivered", "partial_delivered"].includes(status)) {
               deliveredCount++;
-            } else if (status.includes("cancel") || status.includes("return")) {
+            } else if (status === "cancelled" || status.includes("return")) {
               cancelledCount++;
             }
 
-            const orderCost = Number(
-              order.cost ?? 
-              order.buying_price ?? 
-              order.purchase_cost ?? 
-              order.product_cost ?? 
-              0
-            );
+            const pCost = n(order.product_cost ?? order.cost ?? 0);
+            const dCharge = n(order.delivery_charge ?? 0);
+            const bCost = n(order.boost_cost ?? 0);
+            const tAmount = n(order.total_amount ?? order.price ?? 0);
 
-            const orderProfit = Number(
-              order.profit ?? 
-              order.net_profit ?? 
-              0
-            );
-
-            const orderDelivery = Number(
-              order.delivery_charge ?? 
-              order.shipping_charge ?? 
-              order.delivery ?? 
-              0
-            );
-
-            // সব ধরনের সম্ভাব্য কমিশনের কলামের নাম চেক করা হচ্ছে
-            const orderCommission = Number(
-              order.commission ?? 
-              order.sakin_commission ?? 
-              order.mod_commission ?? 
-              order.comission ?? 
-              order.moderator_commission ?? 
-              0
-            );
-
-            cost += orderCost;
-            profit += orderProfit;
-            delivery += orderDelivery;
-            commission += orderCommission;
-
-            // মডারেটরের নামের সম্ভাব্য কলামগুলো চেক করা হচ্ছে (যাতে সাকিন বা অন্য কারো নাম Unknown না দেখায়)
-            let moderator = String(
-              order.moderator_name ?? 
-              order.moderator ?? 
-              order.user_name ?? 
-              order.created_by ?? 
-              order.agent ?? 
-              order.staff ?? 
-              order.name ?? 
-              "Unknown"
-            ).trim();
-
-            // যদি মডারেটর ফিল্ড খালি থাকে
-            if (!moderator || moderator === "") {
-              moderator = "Unknown";
-            }
-
-            if (!modMap[moderator]) {
-              modMap[moderator] = { count: 0, sales: 0, commission: 0 };
-            }
-            modMap[moderator].count += 1;
-            modMap[moderator].sales += Number(order.total_amount ?? order.price ?? order.grand_total ?? 0);
-            modMap[moderator].commission += orderCommission;
+            const totalItemCost = pCost + dCharge + bCost;
+            cost += totalItemCost;
+            delivery += dCharge;
+            profit += tAmount - totalItemCost;
           });
 
+          // Commission calculation: ৳15 per non-cancelled order
+          const validCommissionOrders = sakinOrders.filter(
+            (o) => String(o.status || "").toLowerCase() !== "cancelled"
+          );
+          const totalCommission = validCommissionOrders.length * COMMISSION_PER_ORDER;
+
           setStats({
-            totalOrders: totalOrd,
+            totalOrders: sakinOrders.length,
             deliveredOrders: deliveredCount,
             cancelledOrders: cancelledCount,
             totalProfit: profit,
             totalCost: cost,
             totalDeliveryCharge: delivery,
-            totalCommission: commission,
+            totalCommission: totalCommission,
           });
-
-          const modArray = Object.keys(modMap).map((key) => ({
-            name: key,
-            totalOrders: modMap[key].count,
-            totalSales: modMap[key].sales,
-            totalCommission: modMap[key].commission,
-          }));
-
-          setModeratorDetails(modArray);
         }
       } catch (err) {
         console.error("Error fetching dashboard stats:", err);
@@ -147,12 +137,20 @@ export default function DashboardPage() {
     );
   }
 
+  function statusClass(status: string) {
+    const s = String(status || "").toLowerCase();
+    if (s === "delivered") return "bg-green-100 text-green-700";
+    if (s === "cancelled") return "bg-red-100 text-red-700";
+    if (s.includes("return")) return "bg-orange-100 text-orange-700";
+    return "bg-blue-100 text-blue-700";
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-2 md:p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
-          <p className="text-sm text-gray-500">Welcome back, Admin</p>
+          <h1 className="text-2xl font-bold text-gray-800">Moderator Dashboard ({CURRENT_MODERATOR_NAME})</h1>
+          <p className="text-sm text-gray-500">Your confirmed orders and performance overview</p>
         </div>
 
         {/* ওপরের স্ট্যাটাস ব্যাজগুলো */}
@@ -167,7 +165,7 @@ export default function DashboardPage() {
             Cancelled: {stats.cancelledOrders}
           </div>
           <div className="px-3.5 py-1.5 bg-teal-100 text-teal-800 rounded-lg font-semibold text-xs shadow-sm">
-            Total Commission: ৳ {stats.totalCommission.toLocaleString()}
+            Total Commission: {money(stats.totalCommission)}
           </div>
         </div>
       </div>
@@ -176,7 +174,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">Total Orders</p>
+            <p className="text-sm font-medium text-gray-500">Confirmed Orders</p>
             <h3 className="text-3xl font-bold text-gray-800 mt-1">{stats.totalOrders}</h3>
           </div>
           <div className="p-3 bg-blue-50 text-blue-600 rounded-xl text-xl">📦</div>
@@ -185,7 +183,7 @@ export default function DashboardPage() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Profit</p>
-            <h3 className="text-3xl font-bold text-emerald-600 mt-1">৳ {stats.totalProfit.toLocaleString()}</h3>
+            <h3 className="text-3xl font-bold text-emerald-600 mt-1">{money(stats.totalProfit)}</h3>
           </div>
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xl">📈</div>
         </div>
@@ -193,7 +191,7 @@ export default function DashboardPage() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Cost</p>
-            <h3 className="text-3xl font-bold text-rose-600 mt-1">৳ {stats.totalCost.toLocaleString()}</h3>
+            <h3 className="text-3xl font-bold text-rose-600 mt-1">{money(stats.totalCost)}</h3>
           </div>
           <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-xl">📉</div>
         </div>
@@ -201,40 +199,57 @@ export default function DashboardPage() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Delivery Charge</p>
-            <h3 className="text-3xl font-bold text-amber-600 mt-1">৳ {stats.totalDeliveryCharge.toLocaleString()}</h3>
+            <h3 className="text-3xl font-bold text-amber-600 mt-1">{money(stats.totalDeliveryCharge)}</h3>
           </div>
           <div className="p-3 bg-amber-50 text-amber-600 rounded-xl text-xl">🚚</div>
         </div>
       </div>
 
-      {/* Moderator Order Details Section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Moderator Order Details & Commission</h3>
+      {/* Moderator Orders Detailed Table Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 overflow-hidden">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">Sakin's Confirmed Order Details</h3>
         
-        {moderatorDetails.length === 0 ? (
-          <p className="text-gray-500 text-sm py-4">No moderator data found.</p>
+        {orders.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">No confirmed orders found for Sakin.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
-                <tr className="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  <th className="py-3 px-4">Moderator Name</th>
-                  <th className="py-3 px-4">Total Orders Handled</th>
-                  <th className="py-3 px-4">Total Sales Amount</th>
-                  <th className="py-3 px-4">Total Commission</th>
+                <tr className="border-b border-gray-100 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">
+                  <th className="py-3 px-4">Invoice No</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Customer Name</th>
+                  <th className="py-3 px-4">Phone</th>
+                  <th className="py-3 px-4">Size & Qty</th>
+                  <th className="py-3 px-4">Amount</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
-                {moderatorDetails.map((mod, index) => (
-                  <tr key={index} className="hover:bg-gray-50/50 transition">
-                    <td className="py-3.5 px-4 font-medium text-gray-800">{mod.name}</td>
+                {orders.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50/50 transition">
+                    <td className="py-3.5 px-4 font-semibold text-blue-600">
+                      MCB-{String(item.id).slice(0, 6).toUpperCase()}
+                    </td>
+                    <td className="py-3.5 px-4">{item.order_date || "-"}</td>
+                    <td className="py-3.5 px-4 font-medium text-gray-800">{item.customer_name || "-"}</td>
+                    <td className="py-3.5 px-4 whitespace-nowrap">{item.phone || "-"}</td>
+                    <td className="py-3.5 px-4">{item.size || "-"} ({n(item.qty)})</td>
+                    <td className="py-3.5 px-4 font-semibold text-gray-800">{money(item.total_amount)}</td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-full font-semibold text-xs">
-                        {mod.totalOrders} Orders
+                      <span className={`inline-block rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(item.status)}`}>
+                        {item.status || "Pending"}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 font-semibold text-gray-800">৳ {mod.totalSales.toLocaleString()}</td>
-                    <td className="py-3.5 px-4 font-semibold text-teal-600">৳ {mod.totalCommission.toLocaleString()}</td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => setViewingOrder(item)}
+                        className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition"
+                      >
+                        View Details
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -242,6 +257,45 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Order Details Modal */}
+      {viewingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b pb-3">
+              <h2 className="text-xl font-bold text-gray-800">Order Information</h2>
+              <button onClick={() => setViewingOrder(null)} className="text-2xl text-gray-500 hover:text-black">×</button>
+            </div>
+            <div className="space-y-3 text-sm">
+              {[
+                ["Invoice No", `MCB-${String(viewingOrder.id).slice(0, 6).toUpperCase()}`],
+                ["Date", viewingOrder.order_date],
+                ["Customer Name", viewingOrder.customer_name],
+                ["Phone", viewingOrder.phone],
+                ["Address", viewingOrder.address],
+                ["Size & Qty", `${viewingOrder.size} (${n(viewingOrder.qty)})`],
+                ["Total Amount", money(viewingOrder.total_amount)],
+                ["Advanced Paid", money(viewingOrder.advance_amount)],
+                ["Status", viewingOrder.status],
+                ["Tracking Code", viewingOrder.tracking_code || "N/A"],
+              ].map(([label, value]) => (
+                <div key={label} className="flex justify-between border-b border-gray-50 pb-2">
+                  <span className="text-gray-500">{label}:</span>
+                  <span className="font-medium text-gray-800">{value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex items-center justify-end border-t pt-4">
+              <button
+                onClick={() => setViewingOrder(null)}
+                className="rounded-xl bg-gray-800 px-5 py-2 text-sm font-semibold text-white hover:bg-gray-900 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
