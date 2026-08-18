@@ -13,7 +13,6 @@ type Order = {
 type FraudScore = { score: number; loading?: boolean };
 const COMMISSION_PER_ORDER = 15;
 
-// মডারেটর কিনা তা আপনার সিস্টেম বা সেশন অনুযায়ী এখানে নির্ধারণ করবেন (যেমন: session?.role === 'moderator')
 const IS_MODERATOR_VIEW = false; 
 const CURRENT_MODERATOR_NAME = "Sakin";
 
@@ -133,7 +132,6 @@ export default function OrderHistoryPage() {
     return(selectedDate?matchesDate:matchesMonth)&&matchesSearch;
   }),[orders,selectedMonth,selectedDate,searchQuery]);
 
-  // মডারেটর হলে শুধু তার নিজের কনফার্ম করা অর্ডারগুলো দেখাবে
   const filteredOrders = useMemo(() => {
     if (IS_MODERATOR_VIEW) {
       return baseFilteredOrders.filter(item => confirmedByOrderId[String(item.id)] === CURRENT_MODERATOR_NAME);
@@ -158,7 +156,7 @@ export default function OrderHistoryPage() {
         totalProfitSum=totalSalesSum-totalCostSum;
 
   function setOrderConfirmedBy(orderId:number,person:string){
-    if (IS_MODERATOR_VIEW) return; // মডারেটর কনফার্মেশন চেঞ্জ করতে পারবে না
+    if (IS_MODERATOR_VIEW) return;
     setConfirmedByOrderId(current=>{
       const next={...current};
       if(person)next[String(orderId)]=person;
@@ -168,10 +166,11 @@ export default function OrderHistoryPage() {
     });
   }
 
-  function confirmedCount(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person).length;}
-  function deliveredCount(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()==="delivered").length;}
-  function cancelledCount(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()==="cancelled").length;}
-  function commissionTotal(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()!=="cancelled").length*COMMISSION_PER_ORDER;}
+  // এখানে 'My' এর বদলে টোটাল ডাটা শো করার জন্য ফিল্ডগুলো আপডেট করা হলো
+  function totalOrdersRowsCount(rows:Order[]){return rows.length;}
+  function deliveredRowsCount(rows:Order[]){return rows.filter(row=>String(row.status||"").toLowerCase()==="delivered").length;}
+  function cancelledRowsCount(rows:Order[]){return rows.filter(row=>String(row.status||"").toLowerCase()==="cancelled").length;}
+  function totalCommissionAmount(rows:Order[]){return rows.filter(row=>String(row.status||"").toLowerCase()!=="cancelled").length*COMMISSION_PER_ORDER;}
 
   function updateField(field:keyof Order,value:string){
     setEditingOrder(current=>current?{...current,[field]:["qty","total_amount","advance_amount","product_cost","delivery_charge","boost_cost"].includes(field)?n(value):value}:null);
@@ -244,9 +243,10 @@ export default function OrderHistoryPage() {
     return"bg-yellow-100 text-yellow-700";
   }
 
-  function ModeratorSummary({rows}:{rows:Order[]}){
-    const count=confirmedCount(rows),delivered=deliveredCount(rows),cancelled=cancelledCount(rows),commission=commissionTotal(rows);
-    return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">My Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">My Commission: {money(commission)}</span></div>;
+  // ব্যাজগুলো আপডেট করে 'Total' এবং 'Total Commission' করা হলো
+  function StatsSummary({rows}:{rows:Order[]}){
+    const count=totalOrdersRowsCount(rows),delivered=deliveredRowsCount(rows),cancelled=cancelledRowsCount(rows),commission=totalCommissionAmount(rows);
+    return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Total Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Total Commission: {money(commission)}</span></div>;
   }
 
   function OrderTable({rows}:{rows:Order[]}){
@@ -298,7 +298,7 @@ export default function OrderHistoryPage() {
         </tbody>
       </table>
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
-        <ModeratorSummary rows={rows}/>
+        <StatsSummary rows={rows}/>
         {!IS_MODERATOR_VIEW && rows.length>0 && <button onClick={()=>exportDateOrders(rows,rows[0]?.order_date||'orders')} className="ml-auto rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700">Export Excel</button>}
       </div>
     </>;
@@ -310,7 +310,7 @@ export default function OrderHistoryPage() {
         <h1 className="text-3xl font-bold">{IS_MODERATOR_VIEW ? "My Confirmation History" : "Order History"}</h1>
         <p className="mt-2 text-gray-500">{IS_MODERATOR_VIEW ? "View your confirmed orders and commission details." : "View and manage orders grouped by date."}</p>
       </div>
-      <ModeratorSummary rows={filteredOrders}/>
+      <StatsSummary rows={filteredOrders}/>
     </div>
     
     <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -344,8 +344,8 @@ export default function OrderHistoryPage() {
             <tr>
               <th className="p-4 text-left">Date</th>
               <th className="p-4 text-left">Total</th>
-              <th className="p-4 text-left">My Orders</th>
-              <th className="p-4 text-left">My Commission</th>
+              <th className="p-4 text-left">Total Orders</th>
+              <th className="p-4 text-left">Total Commission</th>
               <th className="p-4 text-right">Action</th>
             </tr>
           </thead>
@@ -355,8 +355,8 @@ export default function OrderHistoryPage() {
               return <tr key={date} className="border-b hover:bg-gray-50">
                 <td className="p-4 font-medium">{date}</td>
                 <td className="p-4 text-gray-600">{rows.length}</td>
-                <td className="p-4 font-bold text-blue-700">{confirmedCount(rows)}</td>
-                <td className="p-4 font-bold text-emerald-700">{money(commissionTotal(rows))}</td>
+                <td className="p-4 font-bold text-blue-700">{totalOrdersRowsCount(rows)}</td>
+                <td className="p-4 font-bold text-emerald-700">{money(totalCommissionAmount(rows))}</td>
                 <td className="p-4 text-right"><button onClick={()=>setSelectedDateOrders({date,orders:rows})} className="font-semibold text-teal-600 hover:underline">View</button></td>
               </tr>;
             })}
@@ -371,7 +371,7 @@ export default function OrderHistoryPage() {
           <div className="mb-4 flex items-center justify-between border-b pb-3">
             <div>
               <h2 className="text-xl font-bold">Orders Details on {selectedDateOrders.date}</h2>
-              <div className="mt-2"><ModeratorSummary rows={selectedDateOrders.orders}/></div>
+              <div className="mt-2"><StatsSummary rows={selectedDateOrders.orders}/></div>
             </div>
             <button onClick={()=>setSelectedDateOrders(null)} className="text-2xl font-bold text-gray-500">×</button>
           </div>
@@ -449,7 +449,7 @@ export default function OrderHistoryPage() {
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <button onClick={()=>setEditingOrder(null)} className="rounded-lg border bg-gray-100 px-5 py-3">Cancel</button>
-            <button onClick={updateOrder} disabled={saving} className="rounded-lg bg-green-600 px-5 py-3 font-semibold text-white disabled:opacity-50">{saving?'Saving ...':'Save Changes'}</button>
+            <button onClick={updateOrder} disabled={saving} className="rounded-lg bg-blue-600 px-5 py-3 text-white font-semibold">{saving ? "Saving..." : "Save Changes"}</button>
           </div>
         </div>
       </div>
