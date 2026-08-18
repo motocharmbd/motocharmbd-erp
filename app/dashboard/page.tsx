@@ -27,7 +27,10 @@ export default function DashboardPage() {
 
         if (error) throw error;
 
-        if (orders) {
+        if (orders && orders.length > 0) {
+          // আপনার ডাটাবেসের প্রথম অর্ডারটি কনসোলে প্রিন্ট করে দেখে নিতে পারেন ফিল্ডগুলোর আসল নাম কী
+          console.log("Full Order Row Data:", orders[0]);
+
           let totalOrd = orders.length;
           let deliveredCount = 0;
           let cancelledCount = 0;
@@ -36,7 +39,7 @@ export default function DashboardPage() {
           let delivery = 0;
           let commission = 0;
           
-          const modMap: { [key: string]: { count: number; sales: number } } = {};
+          const modMap: { [key: string]: { count: number; sales: number; commission: number } } = {};
 
           orders.forEach((order) => {
             const status = String(order.status || "").toLowerCase();
@@ -46,17 +49,57 @@ export default function DashboardPage() {
               cancelledCount++;
             }
 
-            profit += Number(order.profit || 0);
-            cost += Number(order.cost || 0);
-            delivery += Number(order.delivery_charge || 0);
-            commission += Number(order.commission || 0);
+            // বিভিন্ন সম্ভাব্য কলামের নাম চেক করা হচ্ছে যাতে Cost এবং Commission মিস না হয়
+            const orderCost = Number(
+              order.cost ?? 
+              order.buying_price ?? 
+              order.purchase_cost ?? 
+              order.product_cost ?? 
+              0
+            );
 
-            const moderator = order.moderator_name || order.moderator || "Unknown";
+            const orderProfit = Number(
+              order.profit ?? 
+              order.net_profit ?? 
+              0
+            );
+
+            const orderDelivery = Number(
+              order.delivery_charge ?? 
+              order.shipping_charge ?? 
+              order.delivery ?? 
+              0
+            );
+
+            const orderCommission = Number(
+              order.commission ?? 
+              order.sakin_commission ?? 
+              order.mod_commission ?? 
+              order.comission ?? 
+              0
+            );
+
+            cost += orderCost;
+            profit += orderProfit;
+            delivery += orderDelivery;
+            commission += orderCommission;
+
+            // মডারেটরের নাম বিভিন্ন কলাম থেকে খোঁজা হচ্ছে
+            const moderator = String(
+              order.moderator_name ?? 
+              order.moderator ?? 
+              order.user_name ?? 
+              order.created_by ?? 
+              order.agent ?? 
+              "Unknown"
+            );
+
             if (!modMap[moderator]) {
-              modMap[moderator] = { count: 0, sales: 0 };
+              modMap[moderator] = { count: 0, sales: 0, commission: 0 };
             }
             modMap[moderator].count += 1;
-            modMap[moderator].sales += Number(order.total_amount || order.price || 0);
+            modMap[moderator].sales += Number(order.total_amount ?? order.price ?? order.grand_total ?? 0);
+            modMap[moderator].commission += orderCommission;
           });
 
           setStats({
@@ -73,6 +116,7 @@ export default function DashboardPage() {
             name: key,
             totalOrders: modMap[key].count,
             totalSales: modMap[key].sales,
+            totalCommission: modMap[key].commission,
           }));
 
           setModeratorDetails(modArray);
@@ -89,7 +133,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="text-lg font-semibold text-gray-600 animate-pulse">Loading Dashboard...</div>
       </div>
     );
@@ -103,7 +147,7 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-500">Welcome back, Admin</p>
         </div>
 
-        {/* ওপরের স্ট্যাটাস ব্যাজগুলো (Total Orders, Delivered, Cancelled, Total Commission) */}
+        {/* ওপরের স্ট্যাটাস ব্যাজগুলো */}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="px-3.5 py-1.5 bg-blue-100 text-blue-800 rounded-lg font-semibold text-xs shadow-sm">
             Total Orders: {stats.totalOrders}
@@ -120,7 +164,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Main Metric Cards: Total Orders, Profit, Cost, Delivery Charge */}
+      {/* Main Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
@@ -157,7 +201,7 @@ export default function DashboardPage() {
 
       {/* Moderator Order Details Section */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">Moderator Order Details</h3>
+        <h3 className="text-lg font-bold text-gray-800 mb-4">Moderator Order Details & Commission</h3>
         
         {moderatorDetails.length === 0 ? (
           <p className="text-gray-500 text-sm py-4">No moderator data found.</p>
@@ -169,6 +213,7 @@ export default function DashboardPage() {
                   <th className="py-3 px-4">Moderator Name</th>
                   <th className="py-3 px-4">Total Orders Handled</th>
                   <th className="py-3 px-4">Total Sales Amount</th>
+                  <th className="py-3 px-4">Total Commission</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-sm text-gray-700">
@@ -181,6 +226,7 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-gray-800">৳ {mod.totalSales.toLocaleString()}</td>
+                    <td className="py-3.5 px-4 font-semibold text-teal-600">৳ {mod.totalCommission.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
