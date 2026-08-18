@@ -12,6 +12,11 @@ type Order = {
 };
 type FraudScore = { score: number; loading?: boolean };
 const COMMISSION_PER_ORDER = 15;
+
+// মডারেটর কিনা তা আপনার সিস্টেম বা সেশন অনুযায়ী এখানে নির্ধারণ করবেন (যেমন: session?.role === 'moderator')
+const IS_MODERATOR_VIEW = false; 
+const CURRENT_MODERATOR_NAME = "Sakin";
+
 function n(value: unknown): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function money(value: unknown) { return `৳${n(value).toLocaleString("en-BD")}`; }
 function withCalculatedValues(item: any): Order {
@@ -119,7 +124,7 @@ export default function OrderHistoryPage() {
     if(changed)setOrders(updated);
   }
 
-  const filteredOrders=useMemo(()=>orders.filter(item=>{
+  const baseFilteredOrders=useMemo(()=>orders.filter(item=>{
     const matchesDate=!selectedDate||item.order_date===selectedDate,
           matchesMonth=selectedMonth==="all"||item.order_date?.startsWith(selectedMonth),
           query=searchQuery.toLowerCase().trim(),
@@ -127,6 +132,14 @@ export default function OrderHistoryPage() {
           matchesSearch=!query||invoiceId.includes(query)||String(item.id).toLowerCase().includes(query)||item.customer_name?.toLowerCase().includes(query)||item.phone?.toLowerCase().includes(query)||item.tracking_code?.toLowerCase().includes(query);
     return(selectedDate?matchesDate:matchesMonth)&&matchesSearch;
   }),[orders,selectedMonth,selectedDate,searchQuery]);
+
+  // মডারেটর হলে শুধু তার নিজের কনফার্ম করা অর্ডারগুলো দেখাবে
+  const filteredOrders = useMemo(() => {
+    if (IS_MODERATOR_VIEW) {
+      return baseFilteredOrders.filter(item => confirmedByOrderId[String(item.id)] === CURRENT_MODERATOR_NAME);
+    }
+    return baseFilteredOrders;
+  }, [baseFilteredOrders, confirmedByOrderId]);
 
   const groupedByDate=useMemo(()=>{
     const grouped:Record<string,Order[]>={};
@@ -145,6 +158,7 @@ export default function OrderHistoryPage() {
         totalProfitSum=totalSalesSum-totalCostSum;
 
   function setOrderConfirmedBy(orderId:number,person:string){
+    if (IS_MODERATOR_VIEW) return; // মডারেটর কনফার্মেশন চেঞ্জ করতে পারবে না
     setConfirmedByOrderId(current=>{
       const next={...current};
       if(person)next[String(orderId)]=person;
@@ -154,9 +168,10 @@ export default function OrderHistoryPage() {
     });
   }
 
-  function confirmedCount(rows:Order[],person="Sakin"){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person).length;}
-  function cancelledCount(rows:Order[],person="Sakin"){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()==="cancelled").length;}
-  function commissionTotal(rows:Order[],person="Sakin"){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()!=="cancelled").length*COMMISSION_PER_ORDER;}
+  function confirmedCount(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person).length;}
+  function deliveredCount(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()==="delivered").length;}
+  function cancelledCount(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()==="cancelled").length;}
+  function commissionTotal(rows:Order[],person=CURRENT_MODERATOR_NAME){return rows.filter(row=>confirmedByOrderId[String(row.id)]===person&&String(row.status||"").toLowerCase()!=="cancelled").length*COMMISSION_PER_ORDER;}
 
   function updateField(field:keyof Order,value:string){
     setEditingOrder(current=>current?{...current,[field]:["qty","total_amount","advance_amount","product_cost","delivery_charge","boost_cost"].includes(field)?n(value):value}:null);
@@ -179,6 +194,7 @@ export default function OrderHistoryPage() {
   }
 
   async function deleteOrder(id:number){
+    if(IS_MODERATOR_VIEW) return;
     if(!window.confirm("Are you sure you want to delete this order?"))return;
     const {error}=await supabase.from("orders").delete().eq("id",id);
     if(error){alert(error.message);return;}
@@ -210,6 +226,7 @@ export default function OrderHistoryPage() {
   }
 
   function exportDateOrders(rows:Order[],date:string){
+    if(IS_MODERATOR_VIEW) return;
     const header=["Invoice No","Date","Customer","Phone","Address","Size","Qty","Amount","Advanced","Product Cost","Delivery","Boost","Total Cost","Profit","Status","Confirmed By","Tracking","Fraud Score"];
     const csvRows=rows.map(item=>{
       const calculated=withCalculatedValues(item),score=fraudScores[String(item.phone||"").trim()]?.score??"";
@@ -227,16 +244,16 @@ export default function OrderHistoryPage() {
     return"bg-yellow-100 text-yellow-700";
   }
 
-  function SakinSummary({rows}:{rows:Order[]}){
-    const count=confirmedCount(rows),delivered=rows.filter(row=>confirmedByOrderId[String(row.id)]==="Sakin"&&String(row.status||"").toLowerCase()==="delivered").length,cancelled=cancelledCount(rows),commission=commissionTotal(rows);
-    return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Sakin Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Sakin Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Sakin Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Sakin Commission: {money(commission)}</span></div>;
+  function ModeratorSummary({rows}:{rows:Order[]}){
+    const count=confirmedCount(rows),delivered=deliveredCount(rows),cancelled=cancelledCount(rows),commission=commissionTotal(rows);
+    return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">My Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">My Commission: {money(commission)}</span></div>;
   }
 
   function OrderTable({rows}:{rows:Order[]}){
     return <>
       <table className="w-full min-w-[2200px]">
         <thead className="bg-gray-100">
-          <tr>{['Invoice No','Date','Customer','Phone','Address','Size','Qty','Amount','Advanced','Product Cost','Delivery','Boost','Total Cost','Profit','Status','Order Confirmed By','Steadfast Courier','Fraud Score','Action'].map(h=><th key={h} className="p-3 text-left">{h}</th>)}</tr>
+          <tr>{['Invoice No','Date','Customer','Phone','Address','Size','Qty','Amount','Advanced', !IS_MODERATOR_VIEW && 'Product Cost', !IS_MODERATOR_VIEW && 'Delivery', !IS_MODERATOR_VIEW && 'Boost', !IS_MODERATOR_VIEW && 'Total Cost', !IS_MODERATOR_VIEW && 'Profit','Status','Order Confirmed By','Steadfast Courier','Fraud Score','Action'].filter(Boolean).map(h=><th key={h as string} className="p-3 text-left">{h as string}</th>)}</tr>
         </thead>
         <tbody>
           {rows.length===0?<tr><td colSpan={19} className="p-6 text-center text-gray-500">No matching orders found.</td></tr>:rows.map(item=>{
@@ -251,17 +268,21 @@ export default function OrderHistoryPage() {
               <td className="p-3">{n(item.qty)}</td>
               <td className="p-3">{money(calculated.total_amount)}</td>
               <td className="p-3 font-semibold text-green-600">{money(calculated.advance_amount)}</td>
-              <td className="p-3">{money(calculated.product_cost)}</td>
-              <td className="p-3">{money(calculated.delivery_charge)}</td>
-              <td className="p-3">{money(calculated.boost_cost)}</td>
-              <td className="p-3 font-semibold text-red-600">{money(calculated.total_cost)}</td>
-              <td className="p-3 font-semibold text-green-600">{money(calculated.profit)}</td>
+              {!IS_MODERATOR_VIEW && <td className="p-3">{money(calculated.product_cost)}</td>}
+              {!IS_MODERATOR_VIEW && <td className="p-3">{money(calculated.delivery_charge)}</td>}
+              {!IS_MODERATOR_VIEW && <td className="p-3">{money(calculated.boost_cost)}</td>}
+              {!IS_MODERATOR_VIEW && <td className="p-3 font-semibold text-red-600">{money(calculated.total_cost)}</td>}
+              {!IS_MODERATOR_VIEW && <td className="p-3 font-semibold text-green-600">{money(calculated.profit)}</td>}
               <td className="p-3"><span className={`inline-block rounded-lg px-3 py-1.5 font-semibold ${statusClass(item.status||"Pending")}`}>{item.status||"Pending"}</span></td>
               <td className="p-3">
-                <select value={confirmedByOrderId[String(item.id)]||""} onChange={e=>setOrderConfirmedBy(item.id,e.target.value)} className="min-w-[135px] rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold">
-                  <option value="">Select Name</option>
-                  <option value="Sakin">Sakin</option>
-                </select>
+                {IS_MODERATOR_VIEW ? (
+                  <span className="font-medium">{confirmedByOrderId[String(item.id)] || "—"}</span>
+                ) : (
+                  <select value={confirmedByOrderId[String(item.id)]||""} onChange={e=>setOrderConfirmedBy(item.id,e.target.value)} className="min-w-[135px] rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold">
+                    <option value="">Select Name</option>
+                    <option value="Sakin">Sakin</option>
+                  </select>
+                )}
               </td>
               <td className="p-3">
                 {item.tracking_code ? (
@@ -277,8 +298,8 @@ export default function OrderHistoryPage() {
         </tbody>
       </table>
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
-        <SakinSummary rows={rows}/>
-        {rows.length>0&&<button onClick={()=>exportDateOrders(rows,rows[0]?.order_date||'orders')} className="ml-auto rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700">Export Excel</button>}
+        <ModeratorSummary rows={rows}/>
+        {!IS_MODERATOR_VIEW && rows.length>0 && <button onClick={()=>exportDateOrders(rows,rows[0]?.order_date||'orders')} className="ml-auto rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700">Export Excel</button>}
       </div>
     </>;
   }
@@ -286,10 +307,10 @@ export default function OrderHistoryPage() {
   return <div className="p-6">
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-3xl font-bold">Order History</h1>
-        <p className="mt-2 text-gray-500">View and manage orders grouped by date.</p>
+        <h1 className="text-3xl font-bold">{IS_MODERATOR_VIEW ? "My Confirmation History" : "Order History"}</h1>
+        <p className="mt-2 text-gray-500">{IS_MODERATOR_VIEW ? "View your confirmed orders and commission details." : "View and manage orders grouped by date."}</p>
       </div>
-      <SakinSummary rows={filteredOrders}/>
+      <ModeratorSummary rows={filteredOrders}/>
     </div>
     
     <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -305,15 +326,17 @@ export default function OrderHistoryPage() {
       <input type="text" placeholder="Search by Invoice, name, phone, tracking..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-80 rounded-lg border bg-white p-3 font-medium"/>
     </div>
 
-    <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-      <div className="rounded-2xl bg-blue-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Orders</p><h3 className="mt-2 text-3xl font-bold">{totalOrdersCount}</h3></div>
-      <div className="rounded-2xl bg-purple-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Sales</p><h3 className="mt-2 text-3xl font-bold">{money(totalSalesSum)}</h3></div>
-      <div className="rounded-2xl bg-red-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Cost</p><h3 className="mt-2 text-3xl font-bold">{money(totalCostSum)}</h3></div>
-      <div className="rounded-2xl bg-emerald-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Profit</p><h3 className="mt-2 text-3xl font-bold">{money(totalProfitSum)}</h3></div>
-    </div>
+    {!IS_MODERATOR_VIEW && (
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="rounded-2xl bg-blue-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Orders</p><h3 className="mt-2 text-3xl font-bold">{totalOrdersCount}</h3></div>
+        <div className="rounded-2xl bg-purple-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Sales</p><h3 className="mt-2 text-3xl font-bold">{money(totalSalesSum)}</h3></div>
+        <div className="rounded-2xl bg-red-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Cost</p><h3 className="mt-2 text-3xl font-bold">{money(totalCostSum)}</h3></div>
+        <div className="rounded-2xl bg-emerald-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Profit</p><h3 className="mt-2 text-3xl font-bold">{money(totalProfitSum)}</h3></div>
+      </div>
+    )}
 
     <div className="overflow-x-auto rounded-xl bg-white shadow">
-      {searchQuery.trim()||selectedDate ? (
+      {searchQuery.trim()||selectedDate || IS_MODERATOR_VIEW ? (
         <OrderTable rows={filteredOrders}/>
       ) : (
         <table className="w-full">
@@ -321,8 +344,8 @@ export default function OrderHistoryPage() {
             <tr>
               <th className="p-4 text-left">Date</th>
               <th className="p-4 text-left">Total</th>
-              <th className="p-4 text-left">Sakin Orders</th>
-              <th className="p-4 text-left">Sakin Commission</th>
+              <th className="p-4 text-left">My Orders</th>
+              <th className="p-4 text-left">My Commission</th>
               <th className="p-4 text-right">Action</th>
             </tr>
           </thead>
@@ -348,7 +371,7 @@ export default function OrderHistoryPage() {
           <div className="mb-4 flex items-center justify-between border-b pb-3">
             <div>
               <h2 className="text-xl font-bold">Orders Details on {selectedDateOrders.date}</h2>
-              <div className="mt-2"><SakinSummary rows={selectedDateOrders.orders}/></div>
+              <div className="mt-2"><ModeratorSummary rows={selectedDateOrders.orders}/></div>
             </div>
             <button onClick={()=>setSelectedDateOrders(null)} className="text-2xl font-bold text-gray-500">×</button>
           </div>
@@ -375,27 +398,31 @@ export default function OrderHistoryPage() {
               ['Size & Qty',`${viewingOrder.size} (${n(viewingOrder.qty)})`],
               ['Total Amount',money(viewingOrder.total_amount)],
               ['Advanced Paid',money(viewingOrder.advance_amount)],
-              ['Product Cost',money(viewingOrder.product_cost)],
-              ['Delivery Charge',money(viewingOrder.delivery_charge)],
-              ['Boost Cost',money(viewingOrder.boost_cost)],
-              ['Total Cost',money(n(viewingOrder.product_cost)+n(viewingOrder.delivery_charge)+n(viewingOrder.boost_cost))],
-              ['Profit',money(n(viewingOrder.total_amount)-n(viewingOrder.product_cost)-n(viewingOrder.delivery_charge)-n(viewingOrder.boost_cost))],
+              ...(!IS_MODERATOR_VIEW ? [
+                ['Product Cost',money(viewingOrder.product_cost)],
+                ['Delivery Charge',money(viewingOrder.delivery_charge)],
+                ['Boost Cost',money(viewingOrder.boost_cost)],
+                ['Total Cost',money(n(viewingOrder.product_cost)+n(viewingOrder.delivery_charge)+n(viewingOrder.boost_cost))],
+                ['Profit',money(n(viewingOrder.total_amount)-n(viewingOrder.product_cost)-n(viewingOrder.delivery_charge)-n(viewingOrder.boost_cost))]
+              ] : []),
               ['Status',viewingOrder.status],
               ['Tracking Code',viewingOrder.tracking_code || 'N/A']
-            ].map(([label,value])=><div key={label} className="flex justify-between border-b pb-2"><span className="text-gray-500">{label}:</span><span className="font-medium">{value}</span></div>)}
+            ].map(([label,value])=><div key={label as string} className="flex justify-between border-b pb-2"><span className="text-gray-500">{label as string}:</span><span className="font-medium">{value}</span></div>)}
           </div>
           <div className="mt-6 flex items-center justify-between border-t pt-4">
             <button onClick={()=>downloadInvoice(viewingOrder)} className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white">Download Invoice PDF</button>
-            <div className="flex gap-2">
-              <button onClick={()=>deleteOrder(viewingOrder.id)} className="rounded-lg bg-red-800 px-4 py-2 text-sm font-semibold text-white">Delete</button>
-              <button onClick={()=>setEditingOrder({...viewingOrder})} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Edit</button>
-            </div>
+            {!IS_MODERATOR_VIEW && (
+              <div className="flex gap-2">
+                <button onClick={()=>deleteOrder(viewingOrder.id)} className="rounded-lg bg-red-800 px-4 py-2 text-sm font-semibold text-white">Delete</button>
+                <button onClick={()=>setEditingOrder({...viewingOrder})} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Edit</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
     )}
 
-    {editingOrder && (
+    {editingOrder && !IS_MODERATOR_VIEW && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
         <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
           <div className="mb-6 flex items-center justify-between"><h2 className="text-2xl font-bold">Edit Order</h2><button onClick={()=>setEditingOrder(null)} className="text-3xl text-gray-500">×</button></div>
