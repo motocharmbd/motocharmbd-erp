@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 type Order = {
   id: number; order_date: string; customer_name: string; phone: string; address: string; size: string; qty: number;
@@ -12,8 +10,6 @@ type Order = {
 };
 type FraudScore = { score: number; loading?: boolean };
 const COMMISSION_PER_ORDER = 15;
-
-const IS_MODERATOR_VIEW = false; 
 const CURRENT_MODERATOR_NAME = "Sakin";
 
 function n(value: unknown): number { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
@@ -38,14 +34,21 @@ function scoreFromFraudResponse(payload:any):number {
   return total>0?Math.max(0,Math.min(100,Math.round(success/total*100))):0;
 }
 
-export default function OrderHistoryPage() {
+export default function OrdersHistoryPage() {
   const [orders,setOrders]=useState<Order[]>([]),[selectedMonth,setSelectedMonth]=useState("all"),[selectedDate,setSelectedDate]=useState(""),[searchQuery,setSearchQuery]=useState("");
-  const [selectedDateOrders,setSelectedDateOrders]=useState<{date:string;orders:Order[]}|null>(null),[viewingOrder,setViewingOrder]=useState<Order|null>(null),[editingOrder,setEditingOrder]=useState<Order|null>(null),[saving,setSaving]=useState(false);
+  const [selectedDateOrders,setSelectedDateOrders]=useState<{date:string;orders:Order[]}|null>(null),[viewingOrder,setViewingOrder]=useState<Order|null>(null);
   const [confirmedByOrderId,setConfirmedByOrderId]=useState<Record<string,string>>({}),[fraudScores,setFraudScores]=useState<Record<string,FraudScore>>({});
   const fraudCacheRef=useRef<Record<string,FraudScore>>({}),hasSyncedRef=useRef(false);
   
-  useEffect(()=>{loadAndAutoSyncOrders();try{const saved=localStorage.getItem("mcb_order_confirmed_by");if(saved)setConfirmedByOrderId(JSON.parse(saved));}catch(error){console.error("Failed to load confirmation assignments",error);}},[]);
-  useEffect(()=>{const params=new URLSearchParams(window.location.search),search=params.get("search");if(search)setSearchQuery(search);},[]);
+  useEffect(()=>{
+    try{
+      const saved=localStorage.getItem("mcb_order_confirmed_by");
+      if(saved) setConfirmedByOrderId(JSON.parse(saved));
+    }catch(error){
+      console.error("Failed to load confirmation assignments",error);
+    }
+    loadAndAutoSyncOrders();
+  },[]);
   
   useEffect(()=>{
     const phones=[...new Set(orders.map(o=>String(o.phone||"").trim()).filter(Boolean))];
@@ -123,117 +126,37 @@ export default function OrderHistoryPage() {
     if(changed)setOrders(updated);
   }
 
-  const baseFilteredOrders=useMemo(()=>orders.filter(item=>{
-    const matchesDate=!selectedDate||item.order_date===selectedDate,
-          matchesMonth=selectedMonth==="all"||item.order_date?.startsWith(selectedMonth),
-          query=searchQuery.toLowerCase().trim(),
-          invoiceId=`mcb-${String(item.id).slice(0,6)}`.toLowerCase(),
-          matchesSearch=!query||invoiceId.includes(query)||String(item.id).toLowerCase().includes(query)||item.customer_name?.toLowerCase().includes(query)||item.phone?.toLowerCase().includes(query)||item.tracking_code?.toLowerCase().includes(query);
-    return(selectedDate?matchesDate:matchesMonth)&&matchesSearch;
-  }),[orders,selectedMonth,selectedDate,searchQuery]);
+  // ফিক্সেড: শুধুমাত্র সাকিনের কনফার্ম করা অর্ডারগুলো ফিল্টার করা হচ্ছে
+  const baseFilteredOrders=useMemo(()=>{
+    return orders.filter(item=>{
+      const isSakinOrder = confirmedByOrderId[String(item.id)] === CURRENT_MODERATOR_NAME;
+      if(!isSakinOrder) return false;
 
-  const filteredOrders = useMemo(() => {
-    if (IS_MODERATOR_VIEW) {
-      return baseFilteredOrders.filter(item => confirmedByOrderId[String(item.id)] === CURRENT_MODERATOR_NAME);
-    }
-    return baseFilteredOrders;
-  }, [baseFilteredOrders, confirmedByOrderId]);
+      const matchesDate=!selectedDate||item.order_date===selectedDate,
+            matchesMonth=selectedMonth==="all"||item.order_date?.startsWith(selectedMonth),
+            query=searchQuery.toLowerCase().trim(),
+            invoiceId=`mcb-${String(item.id).slice(0,6)}`.toLowerCase(),
+            matchesSearch=!query||invoiceId.includes(query)||String(item.id).toLowerCase().includes(query)||item.customer_name?.toLowerCase().includes(query)||item.phone?.toLowerCase().includes(query)||item.tracking_code?.toLowerCase().includes(query);
+      return(selectedDate?matchesDate:matchesMonth)&&matchesSearch;
+    });
+  },[orders,selectedMonth,selectedDate,searchQuery,confirmedByOrderId]);
 
   const groupedByDate=useMemo(()=>{
     const grouped:Record<string,Order[]>={};
-    filteredOrders.forEach(item=>{
+    baseFilteredOrders.forEach(item=>{
       const date=item.order_date||"Unknown Date";
       if(!grouped[date])grouped[date]=[];
       grouped[date].push(item);
     });
     return grouped;
-  },[filteredOrders]);
+  },[baseFilteredOrders]);
 
   const dateList=Object.keys(groupedByDate).sort((a,b)=>new Date(b).getTime()-new Date(a).getTime());
-  const totalOrdersCount=filteredOrders.length,
-        totalSalesSum=filteredOrders.reduce((s,i)=>s+n(i.total_amount),0),
-        totalCostSum=filteredOrders.reduce((s,i)=>s+n(i.product_cost)+n(i.delivery_charge)+n(i.boost_cost),0),
-        totalProfitSum=totalSalesSum-totalCostSum;
 
-  function setOrderConfirmedBy(orderId:number,person:string){
-    if (IS_MODERATOR_VIEW) return;
-    setConfirmedByOrderId(current=>{
-      const next={...current};
-      if(person)next[String(orderId)]=person;
-      else delete next[String(orderId)];
-      try{localStorage.setItem("mcb_order_confirmed_by",JSON.stringify(next));}catch{}
-      return next;
-    });
-  }
-
-  // এখানে 'My' এর বদলে টোটাল ডাটা শো করার জন্য ফিল্ডগুলো আপডেট করা হলো
   function totalOrdersRowsCount(rows:Order[]){return rows.length;}
   function deliveredRowsCount(rows:Order[]){return rows.filter(row=>String(row.status||"").toLowerCase()==="delivered").length;}
   function cancelledRowsCount(rows:Order[]){return rows.filter(row=>String(row.status||"").toLowerCase()==="cancelled").length;}
   function totalCommissionAmount(rows:Order[]){return rows.filter(row=>String(row.status||"").toLowerCase()!=="cancelled").length*COMMISSION_PER_ORDER;}
-
-  function updateField(field:keyof Order,value:string){
-    setEditingOrder(current=>current?{...current,[field]:["qty","total_amount","advance_amount","product_cost","delivery_charge","boost_cost"].includes(field)?n(value):value}:null);
-  }
-
-  async function updateOrder(){
-    if(!editingOrder)return;
-    setSaving(true);
-    const productCost=n(editingOrder.product_cost),delivery=n(editingOrder.delivery_charge),boost=n(editingOrder.boost_cost),totalAmount=n(editingOrder.total_amount),totalCost=productCost+delivery+boost;
-    const updateData={customer_name:editingOrder.customer_name,phone:editingOrder.phone,address:editingOrder.address,order_date:editingOrder.order_date,size:editingOrder.size,qty:n(editingOrder.qty),total_amount:totalAmount,advance_amount:n(editingOrder.advance_amount),product_cost:productCost,delivery_charge:delivery,boost_cost:boost,total_cost:totalCost,profit:totalAmount-totalCost,status:editingOrder.status||"Pending",payment_status:editingOrder.payment_status||"Unpaid"};
-    const {data,error}=await supabase.from("orders").update(updateData).eq("id",editingOrder.id).select().single();
-    setSaving(false);
-    if(error){alert(error.message);return;}
-    const updated=withCalculatedValues(data);
-    setOrders(c=>c.map(i=>i.id===editingOrder.id?updated:i));
-    if(selectedDateOrders)setSelectedDateOrders({...selectedDateOrders,orders:selectedDateOrders.orders.map(o=>o.id===editingOrder.id?updated:o)});
-    setEditingOrder(null);
-    setViewingOrder(updated);
-    alert("Order updated successfully");
-  }
-
-  async function deleteOrder(id:number){
-    if(IS_MODERATOR_VIEW) return;
-    if(!window.confirm("Are you sure you want to delete this order?"))return;
-    const {error}=await supabase.from("orders").delete().eq("id",id);
-    if(error){alert(error.message);return;}
-    setOrders(c=>c.filter(i=>i.id!==id));
-    setSelectedDateOrders(c=>c?{...c,orders:c.orders.filter(o=>o.id!==id)}:null);
-    setViewingOrder(null);
-    alert("Order deleted successfully");
-  }
-
-  function downloadInvoice(order:Order){
-    const doc=new jsPDF(),totalAmount=n(order.total_amount),advanceAmount=n(order.advance_amount),deliveryCharge=n(order.delivery_charge),dueAmount=totalAmount+deliveryCharge-advanceAmount;
-    doc.setFont("helvetica","bold");doc.setFontSize(20);doc.text("Moto Charm BD",14,20);
-    doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text("Phone: 01519601483",14,26);doc.text("Address: Dhaka, Bangladesh",14,32);
-    doc.setFont("helvetica","bold");doc.setFontSize(22);doc.text("INVOICE",196,20,{align:"right"});
-    doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(`Invoice No: MCB-${String(order.id).slice(0,6).toUpperCase()}`,196,26,{align:"right"});
-    doc.text(`Date: ${order.order_date||"-"}`,196,32,{align:"right"});
-    doc.line(14,42,196,42);
-    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.text("Billed To:",14,50);
-    doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(`Name: ${order.customer_name||"-"}`,14,56);doc.text(`Phone: ${order.phone||"-"}`,14,62);doc.text(`Address: ${order.address||"-"}`,14,68);
-    const qty=n(order.qty)||1;
-    autoTable(doc,{startY:75,head:[["Item Description","Size","Qty","Unit Price","Total"]],body:[["Moto Charm Accessory / Product",order.size||"-",qty,`TK ${(totalAmount/qty).toFixed(2)}`,`TK ${totalAmount.toFixed(2)}`]],theme:"striped"});
-    const y=(doc as any).lastAutoTable.finalY+10;
-    doc.text("Subtotal:",120,y);doc.text(`TK ${totalAmount.toFixed(2)}`,196,y,{align:"right"});
-    doc.text("Delivery Charge:",120,y+6);doc.text(`TK ${deliveryCharge.toFixed(2)}`,196,y+6,{align:"right"});
-    doc.text("Advanced Paid:",120,y+12);doc.text(`-TK ${advanceAmount.toFixed(2)}`,196,y+12,{align:"right"});
-    doc.line(120,y+16,196,y+16);
-    doc.setFont("helvetica","bold");doc.text("Due Amount:",120,y+22);doc.text(`TK ${dueAmount.toFixed(2)}`,196,y+22,{align:"right"});
-    doc.save(`Invoice_MCB_${String(order.id).slice(0,6)}`);
-  }
-
-  function exportDateOrders(rows:Order[],date:string){
-    if(IS_MODERATOR_VIEW) return;
-    const header=["Invoice No","Date","Customer","Phone","Address","Size","Qty","Amount","Advanced","Product Cost","Delivery","Boost","Total Cost","Profit","Status","Confirmed By","Tracking","Fraud Score"];
-    const csvRows=rows.map(item=>{
-      const calculated=withCalculatedValues(item),score=fraudScores[String(item.phone||"").trim()]?.score??"";
-      return[`MCB-${String(item.id).slice(0,6).toUpperCase()}`,item.order_date,item.customer_name,item.phone,item.address,item.size,n(item.qty),n(item.total_amount),n(item.advance_amount),n(item.product_cost),n(item.delivery_charge),n(item.boost_cost),calculated.total_cost,calculated.profit,item.status,confirmedByOrderId[String(item.id)]||"",item.tracking_code||"",score===""?"":`${score}%`].map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",");
-    });
-    const csv=[header.join(","),...csvRows].join("\r\n"),blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}),url=URL.createObjectURL(blob),a=document.createElement("a");
-    a.href=url;a.download=`MotoCharmBD_Orders_${date}.csv`;a.click();URL.revokeObjectURL(url);
-  }
 
   function statusClass(status:string){
     if(status==="Delivered")return"bg-green-100 text-green-700";
@@ -243,7 +166,6 @@ export default function OrderHistoryPage() {
     return"bg-yellow-100 text-yellow-700";
   }
 
-  // ব্যাজগুলো আপডেট করে 'Total' এবং 'Total Commission' করা হলো
   function StatsSummary({rows}:{rows:Order[]}){
     const count=totalOrdersRowsCount(rows),delivered=deliveredRowsCount(rows),cancelled=cancelledRowsCount(rows),commission=totalCommissionAmount(rows);
     return <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-blue-100 px-3 py-2 text-sm font-bold text-blue-700">Total Orders: {count}</span><span className="rounded-lg bg-green-100 px-3 py-2 text-sm font-bold text-green-700">Delivered: {delivered}</span><span className="rounded-lg bg-red-100 px-3 py-2 text-sm font-bold text-red-700">Cancelled: {cancelled}</span><span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">Total Commission: {money(commission)}</span></div>;
@@ -251,12 +173,12 @@ export default function OrderHistoryPage() {
 
   function OrderTable({rows}:{rows:Order[]}){
     return <>
-      <table className="w-full min-w-[2200px]">
+      <table className="w-full min-w-[1500px]">
         <thead className="bg-gray-100">
-          <tr>{['Invoice No','Date','Customer','Phone','Address','Size','Qty','Amount','Advanced', !IS_MODERATOR_VIEW && 'Product Cost', !IS_MODERATOR_VIEW && 'Delivery', !IS_MODERATOR_VIEW && 'Boost', !IS_MODERATOR_VIEW && 'Total Cost', !IS_MODERATOR_VIEW && 'Profit','Status','Order Confirmed By','Steadfast Courier','Fraud Score','Action'].filter(Boolean).map(h=><th key={h as string} className="p-3 text-left">{h as string}</th>)}</tr>
+          <tr>{['Invoice No','Date','Customer','Phone','Address','Size','Qty','Amount','Advanced','Status','Order Confirmed By','Steadfast Courier','Fraud Score','Action'].map(h=><th key={h} className="p-3 text-left">{h}</th>)}</tr>
         </thead>
         <tbody>
-          {rows.length===0?<tr><td colSpan={19} className="p-6 text-center text-gray-500">No matching orders found.</td></tr>:rows.map(item=>{
+          {rows.length===0?<tr><td colSpan={14} className="p-6 text-center text-gray-500">No matching orders found.</td></tr>:rows.map(item=>{
             const calculated=withCalculatedValues(item),phoneKey=String(item.phone||"").trim(),fraud=fraudScores[phoneKey];
             return <tr key={item.id} className="border-b hover:bg-gray-50">
               <td className="p-3 font-semibold text-blue-600">MCB-{String(item.id).slice(0,6).toUpperCase()}</td>
@@ -268,22 +190,8 @@ export default function OrderHistoryPage() {
               <td className="p-3">{n(item.qty)}</td>
               <td className="p-3">{money(calculated.total_amount)}</td>
               <td className="p-3 font-semibold text-green-600">{money(calculated.advance_amount)}</td>
-              {!IS_MODERATOR_VIEW && <td className="p-3">{money(calculated.product_cost)}</td>}
-              {!IS_MODERATOR_VIEW && <td className="p-3">{money(calculated.delivery_charge)}</td>}
-              {!IS_MODERATOR_VIEW && <td className="p-3">{money(calculated.boost_cost)}</td>}
-              {!IS_MODERATOR_VIEW && <td className="p-3 font-semibold text-red-600">{money(calculated.total_cost)}</td>}
-              {!IS_MODERATOR_VIEW && <td className="p-3 font-semibold text-green-600">{money(calculated.profit)}</td>}
               <td className="p-3"><span className={`inline-block rounded-lg px-3 py-1.5 font-semibold ${statusClass(item.status||"Pending")}`}>{item.status||"Pending"}</span></td>
-              <td className="p-3">
-                {IS_MODERATOR_VIEW ? (
-                  <span className="font-medium">{confirmedByOrderId[String(item.id)] || "—"}</span>
-                ) : (
-                  <select value={confirmedByOrderId[String(item.id)]||""} onChange={e=>setOrderConfirmedBy(item.id,e.target.value)} className="min-w-[135px] rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold">
-                    <option value="">Select Name</option>
-                    <option value="Sakin">Sakin</option>
-                  </select>
-                )}
-              </td>
+              <td className="p-3 font-medium">{confirmedByOrderId[String(item.id)] || "—"}</td>
               <td className="p-3">
                 {item.tracking_code ? (
                   <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">{item.tracking_code}</span>
@@ -299,7 +207,6 @@ export default function OrderHistoryPage() {
       </table>
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-gray-50 p-4">
         <StatsSummary rows={rows}/>
-        {!IS_MODERATOR_VIEW && rows.length>0 && <button onClick={()=>exportDateOrders(rows,rows[0]?.order_date||'orders')} className="ml-auto rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700">Export Excel</button>}
       </div>
     </>;
   }
@@ -307,10 +214,10 @@ export default function OrderHistoryPage() {
   return <div className="p-6">
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-3xl font-bold">{IS_MODERATOR_VIEW ? "My Confirmation History" : "Order History"}</h1>
-        <p className="mt-2 text-gray-500">{IS_MODERATOR_VIEW ? "View your confirmed orders and commission details." : "View and manage orders grouped by date."}</p>
+        <h1 className="text-3xl font-bold">Order History ({CURRENT_MODERATOR_NAME})</h1>
+        <p className="mt-2 text-gray-500">View and manage your confirmed orders grouped by date.</p>
       </div>
-      <StatsSummary rows={filteredOrders}/>
+      <StatsSummary rows={baseFilteredOrders}/>
     </div>
     
     <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -326,18 +233,9 @@ export default function OrderHistoryPage() {
       <input type="text" placeholder="Search by Invoice, name, phone, tracking..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-80 rounded-lg border bg-white p-3 font-medium"/>
     </div>
 
-    {!IS_MODERATOR_VIEW && (
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="rounded-2xl bg-blue-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Orders</p><h3 className="mt-2 text-3xl font-bold">{totalOrdersCount}</h3></div>
-        <div className="rounded-2xl bg-purple-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Sales</p><h3 className="mt-2 text-3xl font-bold">{money(totalSalesSum)}</h3></div>
-        <div className="rounded-2xl bg-red-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Cost</p><h3 className="mt-2 text-3xl font-bold">{money(totalCostSum)}</h3></div>
-        <div className="rounded-2xl bg-emerald-600 p-6 text-white shadow"><p className="text-sm opacity-90">Total Profit</p><h3 className="mt-2 text-3xl font-bold">{money(totalProfitSum)}</h3></div>
-      </div>
-    )}
-
     <div className="overflow-x-auto rounded-xl bg-white shadow">
-      {searchQuery.trim()||selectedDate || IS_MODERATOR_VIEW ? (
-        <OrderTable rows={filteredOrders}/>
+      {searchQuery.trim()||selectedDate ? (
+        <OrderTable rows={baseFilteredOrders}/>
       ) : (
         <table className="w-full">
           <thead className="bg-gray-100">
@@ -381,7 +279,7 @@ export default function OrderHistoryPage() {
       </div>
     )}
 
-    {viewingOrder&&!editingOrder && (
+    {viewingOrder && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
         <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
           <div className="mb-4 flex items-center justify-between border-b pb-3">
@@ -398,58 +296,12 @@ export default function OrderHistoryPage() {
               ['Size & Qty',`${viewingOrder.size} (${n(viewingOrder.qty)})`],
               ['Total Amount',money(viewingOrder.total_amount)],
               ['Advanced Paid',money(viewingOrder.advance_amount)],
-              ...(!IS_MODERATOR_VIEW ? [
-                ['Product Cost',money(viewingOrder.product_cost)],
-                ['Delivery Charge',money(viewingOrder.delivery_charge)],
-                ['Boost Cost',money(viewingOrder.boost_cost)],
-                ['Total Cost',money(n(viewingOrder.product_cost)+n(viewingOrder.delivery_charge)+n(viewingOrder.boost_cost))],
-                ['Profit',money(n(viewingOrder.total_amount)-n(viewingOrder.product_cost)-n(viewingOrder.delivery_charge)-n(viewingOrder.boost_cost))]
-              ] : []),
               ['Status',viewingOrder.status],
               ['Tracking Code',viewingOrder.tracking_code || 'N/A']
-            ].map(([label,value])=><div key={label as string} className="flex justify-between border-b pb-2"><span className="text-gray-500">{label as string}:</span><span className="font-medium">{value}</span></div>)}
+            ].map(([label,value])=><div key={label} className="flex justify-between border-b pb-2"><span className="text-gray-500">{label}:</span><span className="font-medium">{value}</span></div>)}
           </div>
-          <div className="mt-6 flex items-center justify-between border-t pt-4">
-            <button onClick={()=>downloadInvoice(viewingOrder)} className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white">Download Invoice PDF</button>
-            {!IS_MODERATOR_VIEW && (
-              <div className="flex gap-2">
-                <button onClick={()=>deleteOrder(viewingOrder.id)} className="rounded-lg bg-red-800 px-4 py-2 text-sm font-semibold text-white">Delete</button>
-                <button onClick={()=>setEditingOrder({...viewingOrder})} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Edit</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    )}
-
-    {editingOrder && !IS_MODERATOR_VIEW && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
-          <div className="mb-6 flex items-center justify-between"><h2 className="text-2xl font-bold">Edit Order</h2><button onClick={()=>setEditingOrder(null)} className="text-3xl text-gray-500">×</button></div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div><label className="mb-1 block text-sm font-semibold">Customer Name</label><input value={editingOrder.customer_name||''} onChange={e=>updateField('customer_name',e.target.value)} className="w-full rounded-lg border p-3"/></div>
-            <div><label className="mb-1 block text-sm font-semibold">Phone</label><input value={editingOrder.phone||''} onChange={e=>updateField('phone',e.target.value)} className="w-full rounded-lg border p-3"/></div>
-            <div className="md:col-span-2"><label className="mb-1 block text-sm font-semibold">Address</label><input value={editingOrder.address||''} onChange={e=>updateField('address',e.target.value)} className="w-full rounded-lg border p-3"/></div>
-            <div><label className="mb-1 block text-sm font-semibold">Order Date</label><input type="date" value={editingOrder.order_date||''} onChange={e=>updateField('order_date',e.target.value)} className="w-full rounded-lg border p-3"/></div>
-            <div><label className="mb-1 block text-sm font-semibold">Size</label><input value={editingOrder.size||''} onChange={e=>updateField('size',e.target.value)} className="w-full rounded-lg border p-3"/></div>
-            {[['qty','Quantity'],['total_amount','Total Amount (৳)'],['advance_amount','Advanced Paid (৳)'],['product_cost','Product Cost (৳)'],['delivery_charge','Delivery Charge (৳)'],['boost_cost','Boost Cost (৳)']].map(([field,label])=><div key={field}><label className="mb-1 block text-sm font-semibold">{label}</label><input type="number" value={n((editingOrder as any)[field])} onChange={e=>updateField(field as keyof Order,e.target.value)} className="w-full rounded-lg border p-3"/></div>)}
-            <div>
-              <label className="mb-1 block text-sm font-semibold">Status</label>
-              <select value={editingOrder.status||'Pending'} onChange={e=>updateField('status',e.target.value)} className="w-full rounded-lg border bg-white p-3">
-                <option>Pending</option><option>Processing</option><option>Delivered</option><option>Cancelled</option><option>Returned</option>
-              </select>
-            </div>
-            <div><label className="mb-1 block text-sm font-semibold">Tracking Code</label><input value={editingOrder.tracking_code||''} onChange={e=>updateField('tracking_code',e.target.value)} className="w-full rounded-lg border p-3" placeholder="Optional tracking code"/></div>
-          </div>
-          <div className="mt-6 rounded-xl bg-gray-50 p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><span className="text-sm text-gray-500">Calculated Total Cost</span><p className="text-xl font-bold text-red-600">{money(n(editingOrder.product_cost)+n(editingOrder.delivery_charge)+n(editingOrder.boost_cost))}</p></div>
-              <div><span className="text-sm text-gray-500">Calculated Profit</span><p className="text-xl font-bold text-green-600">{money(n(editingOrder.total_amount)-n(editingOrder.product_cost)-n(editingOrder.delivery_charge)-n(editingOrder.boost_cost))}</p></div>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end gap-3">
-            <button onClick={()=>setEditingOrder(null)} className="rounded-lg border bg-gray-100 px-5 py-3">Cancel</button>
-            <button onClick={updateOrder} disabled={saving} className="rounded-lg bg-blue-600 px-5 py-3 text-white font-semibold">{saving ? "Saving..." : "Save Changes"}</button>
+          <div className="mt-6 flex items-center justify-end border-t pt-4">
+            <button onClick={()=>setViewingOrder(null)} className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-semibold text-white">Close</button>
           </div>
         </div>
       </div>
