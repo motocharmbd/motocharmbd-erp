@@ -7,9 +7,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalOrders: 0,
+    deliveredOrders: 0,
+    cancelledOrders: 0,
     totalProfit: 0,
     totalCost: 0,
     totalDeliveryCharge: 0,
+    totalCommission: 0,
   });
   const [moderatorDetails, setModeratorDetails] = useState<any[]>([]);
 
@@ -18,7 +21,6 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         
-        // আপনার অর্ডার টেবিল থেকে ডাটা ফেচ করা (টেবিলের নাম 'orders' না হলে আপনার টেবিল নাম দিয়ে বদল করে নেবেন)
         const { data: orders, error } = await supabase
           .from("orders")
           .select("*");
@@ -27,18 +29,28 @@ export default function DashboardPage() {
 
         if (orders) {
           let totalOrd = orders.length;
+          let deliveredCount = 0;
+          let cancelledCount = 0;
           let profit = 0;
           let cost = 0;
           let delivery = 0;
+          let commission = 0;
+          
           const modMap: { [key: string]: { count: number; sales: number } } = {};
 
           orders.forEach((order) => {
-            // ফিল্ডগুলোর নাম আপনার ডাটাবেস অনুযায়ী অ্যাডজাস্ট করে নিতে পারেন
+            const status = String(order.status || "").toLowerCase();
+            if (status.includes("deliver")) {
+              deliveredCount++;
+            } else if (status.includes("cancel") || status.includes("return")) {
+              cancelledCount++;
+            }
+
             profit += Number(order.profit || 0);
             cost += Number(order.cost || 0);
             delivery += Number(order.delivery_charge || 0);
+            commission += Number(order.commission || 0);
 
-            // মডারেটর অনুযায়ী অর্ডার ডিটেলস হিসাব করা
             const moderator = order.moderator_name || order.moderator || "Unknown";
             if (!modMap[moderator]) {
               modMap[moderator] = { count: 0, sales: 0 };
@@ -49,9 +61,12 @@ export default function DashboardPage() {
 
           setStats({
             totalOrders: totalOrd,
+            deliveredOrders: deliveredCount,
+            cancelledOrders: cancelledCount,
             totalProfit: profit,
             totalCost: cost,
             totalDeliveryCharge: delivery,
+            totalCommission: commission,
           });
 
           const modArray = Object.keys(modMap).map((key) => ({
@@ -82,14 +97,31 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
-        <span className="text-sm text-gray-500">Welcome back, Admin</span>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
+          <p className="text-sm text-gray-500">Welcome back, Admin</p>
+        </div>
+
+        {/* ওপরের স্ট্যাটাস ব্যাজগুলো (Total Orders, Delivered, Cancelled, Total Commission) */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="px-3.5 py-1.5 bg-blue-100 text-blue-800 rounded-lg font-semibold text-xs shadow-sm">
+            Total Orders: {stats.totalOrders}
+          </div>
+          <div className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 rounded-lg font-semibold text-xs shadow-sm">
+            Delivered: {stats.deliveredOrders}
+          </div>
+          <div className="px-3.5 py-1.5 bg-rose-100 text-rose-800 rounded-lg font-semibold text-xs shadow-sm">
+            Cancelled: {stats.cancelledOrders}
+          </div>
+          <div className="px-3.5 py-1.5 bg-teal-100 text-teal-800 rounded-lg font-semibold text-xs shadow-sm">
+            Total Commission: ৳ {stats.totalCommission.toLocaleString()}
+          </div>
+        </div>
       </div>
 
-      {/* Top Stat Cards: Profit, Cost, Delivery Charge, Total Order */}
+      {/* Main Metric Cards: Total Orders, Profit, Cost, Delivery Charge */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Total Orders */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Orders</p>
@@ -98,7 +130,6 @@ export default function DashboardPage() {
           <div className="p-3 bg-blue-50 text-blue-600 rounded-xl text-xl">📦</div>
         </div>
 
-        {/* Total Profit */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Profit</p>
@@ -107,7 +138,6 @@ export default function DashboardPage() {
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl text-xl">📈</div>
         </div>
 
-        {/* Total Cost */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Cost</p>
@@ -116,7 +146,6 @@ export default function DashboardPage() {
           <div className="p-3 bg-rose-50 text-rose-600 rounded-xl text-xl">📉</div>
         </div>
 
-        {/* Delivery Charge */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Delivery Charge</p>
