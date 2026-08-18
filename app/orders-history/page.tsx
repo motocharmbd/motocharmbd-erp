@@ -77,23 +77,44 @@ export default function OrderHistoryPage() {
     setOrders(fetched);
     if(!hasSyncedRef.current){
       hasSyncedRef.current=true;
-      void syncAllTrackingCodes(fetched);
+      void autoFetchMissingTrackingCodes(fetched);
     }
   }
 
-  async function syncAllTrackingCodes(currentOrders:Order[]){
+  async function autoFetchMissingTrackingCodes(currentOrders:Order[]){
     const updated=[...currentOrders]; let changed=false;
     for(let i=0;i<updated.length;i++){
-      const item=updated[i]; if(!item.tracking_code) continue;
-      try{
-        const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`,{cache:"no-store"});
-        const data=await response.json();
-        if(!response.ok || !data?.delivery_status) continue;
-        const nextStatus=mapSteadfastStatus(data.delivery_status);
-        if(!nextStatus || nextStatus===item.status) continue;
-        changed=true; updated[i]=withCalculatedValues({...item,status:nextStatus});
-        await supabase.from("orders").update({status:nextStatus}).eq("id",item.id);
-      }catch(error){console.error("Tracking sync error",item.tracking_code,error);}
+      const item=updated[i];
+      if(!item.tracking_code){
+        try {
+          const res = await fetch('/api/steadfast/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: item.id }),
+          });
+          const steadfastData = await res.json();
+          if (steadfastData.success && steadfastData.tracking_code) {
+            const trackingInput = steadfastData.tracking_code;
+            const { error: dbError } = await supabase.from("orders").update({ tracking_code: trackingInput, status: "Processing" }).eq("id", item.id);
+            if (!dbError) {
+              changed = true;
+              updated[i] = withCalculatedValues({...item, tracking_code: trackingInput, status: "Processing"});
+            }
+          }
+        } catch(err) {
+          console.error("Auto tracking fetch error for order", item.id, err);
+        }
+      } else {
+        try{
+          const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(item.tracking_code)}`,{cache:"no-store"});
+          const data=await response.json();
+          if(!response.ok || !data?.delivery_status) continue;
+          const nextStatus=mapSteadfastStatus(data.delivery_status);
+          if(!nextStatus || nextStatus===item.status) continue;
+          changed=true; updated[i]=withCalculatedValues({...item,status:nextStatus});
+          await supabase.from("orders").update({status:nextStatus}).eq("id",item.id);
+        }catch(error){console.error("Tracking sync error",item.tracking_code,error);}
+      }
     }
     if(changed)setOrders(updated);
   }
@@ -165,55 +186,6 @@ export default function OrderHistoryPage() {
     setSelectedDateOrders(c=>c?{...c,orders:c.orders.filter(o=>o.id!==id)}:null);
     setViewingOrder(null);
     alert("Order deleted successfully");
-  }
-
-  // Steadfast Order Creation or Tracking Add/Update Handler
-  async function handleAddOrUpdateTracking(item:Order,isEdit=false){
-    let trackingInput=item.tracking_code; 
-    const previousTracking=item.tracking_code||"";
-    
-    if(!trackingInput||isEdit){
-      const input=window.prompt("Enter Steadfast Tracking ID (or leave blank to auto-create order in Steadfast):",item.tracking_code||"");
-      if(input===null)return; 
-      trackingInput=input.trim();
-    }
-
-    // যদি ইউজার কোনো ট্র্যাকিং আইডি না দেয়, তবে Steadfast API-এর মাধ্যমে অটো অর্ডার ক্রিয়েট করার রিকোয়েস্ট পাঠাবে
-    if(!trackingInput){
-      try {
-        const steadfastRes = await fetch('/api/steadfast/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: item.id }),
-        });
-        const steadfastData = await steadfastRes.json();
-        if (steadfastData.success && steadfastData.tracking_code) {
-          trackingInput = steadfastData.tracking_code;
-        } else {
-          alert("Failed to create order in Steadfast: " + (steadfastData.message || "Unknown error"));
-          return;
-        }
-      } catch (err: any) {
-        alert("Steadfast API error: " + err.message);
-        return;
-      }
-    }
-
-    try{
-      const response=await fetch(`/api/steadfast?tracking_code=${encodeURIComponent(trackingInput)}`,{cache:"no-store"});
-      const data=await response.json();
-      if(!response.ok){alert("Steadfast API error: "+(data?.error||"Unable to verify tracking ID"));return;}
-      const apiStatus=mapSteadfastStatus(data?.delivery_status);
-      const status=apiStatus || (trackingInput!==previousTracking ? "Processing" : (item.status||"Pending"));
-      
-      const {error}=await supabase.from("orders").update({tracking_code:trackingInput,status}).eq("id",item.id);
-      if(error){alert("Failed to update database: "+error.message);return;}
-      
-      const updated=withCalculatedValues({...item,tracking_code:trackingInput,status});
-      setOrders(c=>c.map(o=>o.id===item.id?updated:o));
-      setSelectedDateOrders(c=>c?{...c,orders:c.orders.map(o=>o.id===item.id?updated:o)}:null);
-      alert(`Success! Tracking Code: ${trackingInput} | Status: ${data?.delivery_status||status}`);
-    }catch(error:any){alert("API Error: "+error.message);}
   }
 
   function downloadInvoice(order:Order){
@@ -293,12 +265,9 @@ export default function OrderHistoryPage() {
               </td>
               <td className="p-3">
                 {item.tracking_code ? (
-                  <div className="flex items-center gap-2">
-                    <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">{item.tracking_code}</span>
-                    <button onClick={()=>handleAddOrUpdateTracking(item,true)} className="text-[10px] text-blue-500 hover:underline">Edit</button>
-                  </div>
+                  <span className="rounded bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">{item.tracking_code}</span>
                 ) : (
-                  <button onClick={()=>handleAddOrUpdateTracking(item)} className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-600">+ Add Tracking</button>
+                  <span className="text-xs text-gray-400">Syncing...</span>
                 )}
               </td>
               <td className="p-3">{fraud?.loading?<span className="text-xs text-gray-400">Checking...</span>:<span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-bold ${fraud?.score>=70?'bg-green-100 text-green-700':fraud?.score>=40?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}`}>{fraud?`${fraud.score}%`:"—"}</span>}</td>
