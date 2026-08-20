@@ -16,33 +16,50 @@ export async function POST(request: Request) {
 
     const invoice: string = payload?.invoice || "";
     const trackingCode: string =
-      payload?.tracking_code || payload?.consignment?.tracking_code || "";
+      payload?.tracking_id || payload?.tracking_code || payload?.consignment?.tracking_code || "";
+    const consignmentId = payload?.consignment_id || "";
     const statusValue = payload?.status_type || payload?.status || "";
-
-    if (!invoice) {
-      // ইনভয়েস না পেলেও Steadfast কে 200 দিতে হবে নাহলে বারবার ফেইল দেখাবে
-      return NextResponse.json({ success: true, message: "Invoice missing but acknowledged" }, { status: 200 });
-    }
-
-    // "MCB-123" থেকে বা সরাসরি আইডি বের করা
-    const orderId = invoice.replace(/^MCB-/i, "").trim();
-    if (!orderId) {
-      return NextResponse.json({ success: true, message: "Invalid order id format" }, { status: 200 });
-    }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    let orderId = "";
+
+    // ১. যদি ইনভয়েস থাকে তবে সেখান থেকে আইডি বের করো
+    if (invoice) {
+      orderId = invoice.replace(/^MCB-/i, "").trim();
+    } 
+    // ২. যদি ইনভয়েস না থাকে, তবে consignment_id বা tracking_id দিয়ে ডেটাবেস থেকে অর্ডার খুঁজে বের করো
+    else if (consignmentId || trackingCode) {
+      let query = supabaseAdmin.from("orders").select("id");
+      
+      if (consignmentId) {
+        query = query.eq("consignment_id", consignmentId); // ডেটাবেসে consignment_id কলাম থাকতে হবে
+      } else if (trackingCode) {
+        query = query.eq("tracking_code", trackingCode);
+      }
+
+      const { data: foundOrders } = await query;
+      if (foundOrders && foundOrders.length > 0) {
+        orderId = foundOrders[0].id;
+      }
+    }
+
+    if (!orderId) {
+      // অর্ডার আইডি না পাওয়া গেলেও Steadfast-কে 200 দিতে হবে যাতে কল ফেইল না দেখায়
+      return NextResponse.json({ success: true, message: "Order could not be matched, but acknowledged" }, { status: 200 });
+    }
+
     const updateData: Record<string, any> = { status: mapStatus(statusValue) };
     if (trackingCode) updateData.tracking_code = trackingCode;
+    if (consignmentId) updateData.consignment_id = consignmentId;
 
     const { error } = await supabaseAdmin.from("orders").update(updateData).eq("id", orderId);
 
     if (error) {
       console.error("Supabase update error in webhook:", error.message);
-      // ডেটাবেসে এরর হলেও Steadfast-কে 200 OK দিতে হয়, না হলে ওরা বারবার কল করতে থাকে
       return NextResponse.json({ success: false, error: error.message }, { status: 200 });
     }
 
