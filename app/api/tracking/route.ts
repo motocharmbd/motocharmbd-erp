@@ -9,6 +9,10 @@ function normalizeStatus(value: unknown): string {
   return "Processing";
 }
 
+function baseUrl() {
+  return (process.env.PATHAO_BASE_URL || "https://api-hermes.pathao.com").replace(/\/+$/, "");
+}
+
 async function steadfast(code: string) {
   const apiKey = process.env.STEADFAST_API_KEY;
   const secretKey = process.env.STEADFAST_SECRET_KEY;
@@ -28,22 +32,41 @@ async function pathao(code: string) {
   const clientSecret = process.env.PATHAO_CLIENT_SECRET;
   const refreshToken = process.env.PATHAO_REFRESH_TOKEN;
   if (!clientId || !clientSecret || !refreshToken) throw new Error("Pathao credentials are not configured");
-  const tokenResponse = await fetch("https://api-hermes.pathao.com/aladdin/api/v1/issue-token", {
+
+  const root = baseUrl();
+  const tokenResponse = await fetch(`${root}/aladdin/api/v1/issue-token`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, grant_type: "refresh_token", refresh_token: refreshToken }),
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
     cache: "no-store",
   });
   const token = await tokenResponse.json().catch(() => ({}));
-  if (!tokenResponse.ok || !token?.access_token) throw new Error(`Pathao token request failed (${tokenResponse.status})`);
-  const response = await fetch(`https://api-hermes.pathao.com/aladdin/api/v1/orders/${encodeURIComponent(code)}`, {
-    headers: { Authorization: `Bearer ${token.access_token}`, Accept: "application/json" },
+  if (!tokenResponse.ok || !token?.access_token) {
+    throw new Error(`Pathao token request failed (${tokenResponse.status})`);
+  }
+
+  const response = await fetch(`${root}/aladdin/api/v1/orders/${encodeURIComponent(code)}`, {
+    headers: {
+      Authorization: `Bearer ${token.access_token}`,
+      Accept: "application/json",
+    },
     cache: "no-store",
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`Pathao returned ${response.status}`);
+
   const raw = payload?.data?.order_status ?? payload?.data?.status ?? payload?.order_status ?? payload?.status;
-  return { courier: "Pathao", delivery_status: normalizeStatus(raw), raw_status: raw ?? "" };
+  return {
+    courier: "Pathao",
+    delivery_status: normalizeStatus(raw),
+    raw_status: raw ?? "",
+    consignment_id: payload?.data?.consignment_id ?? payload?.consignment_id ?? code,
+  };
 }
 
 export async function GET(request: Request) {
@@ -53,21 +76,24 @@ export async function GET(request: Request) {
   if (!code) return NextResponse.json({ error: "Tracking code is required", delivery_status: "" }, { status: 400 });
 
   try {
-    // Explicit courier selection is supported; otherwise detect common tracking formats.
     if (courier === "steadfast") return NextResponse.json(await steadfast(code), { headers: { "Cache-Control": "no-store" } });
     if (courier === "pathao") return NextResponse.json(await pathao(code), { headers: { "Cache-Control": "no-store" } });
-    if (courier === "carrybee") {
-      return NextResponse.json({ error: "CarryBee tracking endpoint is not exposed by the supplied webhook credentials. Add the CarryBee merchant tracking API endpoint to complete direct API tracking.", courier: "CarryBee", delivery_status: "" }, { status: 501 });
-    }
 
-    // Auto-detect: Steadfast tracking codes normally begin with SFR; otherwise try Pathao.
     if (/^SFR/i.test(code)) return NextResponse.json(await steadfast(code), { headers: { "Cache-Control": "no-store" } });
-    try { return NextResponse.json(await pathao(code), { headers: { "Cache-Control": "no-store" } }); }
-    catch (pathaoError) {
-      try { return NextResponse.json(await steadfast(code), { headers: { "Cache-Control": "no-store" } }); }
-      catch { throw pathaoError; }
+
+    try {
+      return NextResponse.json(await pathao(code), { headers: { "Cache-Control": "no-store" } });
+    } catch (pathaoError) {
+      try {
+        return NextResponse.json(await steadfast(code), { headers: { "Cache-Control": "no-store" } });
+      } catch {
+        throw pathaoError;
+      }
     }
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Courier tracking request failed", delivery_status: "" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { error: error?.message || "Courier tracking request failed", delivery_status: "" },
+      { status: 502, headers: { "Cache-Control": "no-store" } }
+    );
   }
 }
