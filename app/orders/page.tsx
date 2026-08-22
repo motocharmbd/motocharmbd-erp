@@ -42,8 +42,6 @@ export default function OrdersPage() {
   const boost = Number(boostCost) || 0;
   const advance = Number(advancedPaid) || 0;
 
-  // Gift box is only a Yes/No flag. It never adds money to cost, COD, or profit.
-  // Selling price is the customer's total amount. Costs affect profit only, never COD.
   const totalCost = productCost + delivery + boost;
   const finalDue = Math.max(0, sellingAmount - advance);
   const profit = sellingAmount - totalCost;
@@ -86,7 +84,7 @@ export default function OrdersPage() {
           body: JSON.stringify({ phoneNumber: cleanPhone }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data?.message || "Fraud check failed");
+        if (!response.ok) throw new Error(data?.message || data?.error || "Fraud check failed");
         if (!cancelled) setFraudResult(data);
       } catch (error: any) {
         if (!cancelled) { console.error(error); setFraudError(error?.message || "Unable to check fraud status"); }
@@ -105,7 +103,7 @@ export default function OrdersPage() {
   const successRateClass = successRate === null ? "" : successRate >= 80 ? "text-emerald-600 bg-emerald-50 border-emerald-200" : successRate >= 50 ? "text-amber-600 bg-amber-50 border-amber-200" : "text-red-600 bg-red-50 border-red-200";
 
   async function saveOrder() {
-    if (!customerName || !phone || !address || !orderDate || !size || !qty || !productPrice || !productCostInput) {
+    if (!customerName || !phone || !address || !orderDate || !size || !qty || !productPrice) {
       alert("Please fill all required fields"); return;
     }
     const cleanPhone = phone.replace(/\D/g, "");
@@ -128,7 +126,6 @@ export default function OrdersPage() {
     }]).select("id").single();
     if (error) { alert(error.message); return; }
 
-    // Keep the existing Order History assignment system in sync.
     if (savedOrder?.id && confirmedBy) {
       try {
         const saved = localStorage.getItem("mcb_order_confirmed_by");
@@ -185,7 +182,7 @@ export default function OrdersPage() {
             {!previousOrdersLoading && previousOrders.length > 0 && <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3"><div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-extrabold text-indigo-700">PREVIOUS ORDER FOUND</h3><p className="mt-0.5 text-xs text-indigo-600">This phone number has {previousOrders.length} previous order{previousOrders.length>1?"s":""} with Moto Charm BD.</p></div><span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-black text-indigo-700">{previousOrders.length} ORDER{previousOrders.length>1?"S":""}</span></div><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[560px] text-xs"><thead><tr className="border-b border-indigo-200 text-left text-indigo-500"><th className="px-2 py-2">Date</th><th className="px-2 py-2">Customer</th><th className="px-2 py-2">Size</th><th className="px-2 py-2">Qty</th><th className="px-2 py-2">Amount</th><th className="px-2 py-2">Status</th></tr></thead><tbody>{previousOrders.map((order:any)=><tr key={order.id} className="border-b border-indigo-100 last:border-0"><td className="px-2 py-2 font-semibold text-slate-700">{order.order_date || "-"}</td><td className="px-2 py-2 text-slate-700">{order.customer_name || "-"}</td><td className="px-2 py-2 text-slate-700">{order.size || "-"}</td><td className="px-2 py-2 text-slate-700">{order.qty || 0}</td><td className="px-2 py-2 font-bold text-slate-800">৳{Number(order.total_amount||0).toLocaleString()}</td><td className="px-2 py-2"><span className="rounded-full bg-white px-2 py-1 font-bold text-slate-600">{order.status || "-"}</span></td></tr>)}</tbody></table></div></div>}
 
             {phone.replace(/\D/g, "").length === 11 && <div className="mt-4">
-              {fraudLoading && <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="flex items-center gap-3"><div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"/><span className="text-sm font-semibold text-slate-600">Checking customer risk...</span></div><span className="text-[11px] font-medium text-slate-400">Courier network</span></div>}
+              {fraudLoading && <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="flex items-center gap-3"><div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"/><span className="text-sm font-semibold text-slate-600">Checking customer risk...</span></div><span className="text-[11px] font-medium text-slate-400">3 courier networks</span></div>}
               {fraudError&&!fraudLoading&&<div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"><div><p className="text-sm font-bold text-amber-700">Risk check unavailable</p><p className="mt-0.5 text-xs text-amber-600">{fraudError}</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700">API ERROR</span></div>}
               {fraudResult&&!fraudLoading&&!fraudError&&<div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">{reports.length>0?<div className="flex-1 rounded-xl border border-red-200 bg-red-50 px-4 py-3"><div className="flex items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-black text-red-600">!</div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-extrabold text-red-700">FRAUD REPORT FOUND</h3><span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">{reports.length} REPORT{reports.length>1?"S":""}</span></div><div className="mt-1 space-y-0.5">{reports.slice(0,2).map((report:any,index:number)=><p key={index} className="truncate text-xs text-red-600"><span className="font-semibold">{report.courierName||report.name||"Unknown Courier"}:</span>{" "}{report.details||report.reason||"Fraud reported"}</p>)}{reports.length>2&&<p className="text-[11px] font-semibold text-red-500">+{reports.length-2} more report(s)</p>}</div></div></div></div>:<div className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"><div className="flex items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-black text-emerald-600">✓</div><div><h3 className="text-sm font-extrabold text-emerald-700">NO FRAUD REPORT</h3><p className="mt-0.5 text-xs text-emerald-600">No reported fraud or scam record found.</p></div></div></div>}{summary&&<div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="min-w-[78px] px-3 py-2 text-center"><p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Orders</p><p className="mt-0.5 text-lg font-black text-slate-800">{summary.total_parcel??0}</p></div><div className="min-w-[78px] border-l border-slate-100 bg-emerald-50/50 px-3 py-2 text-center"><p className="text-[9px] font-bold uppercase tracking-wide text-emerald-600">Success</p><p className="mt-0.5 text-lg font-black text-emerald-600">{summary.success_parcel??0}</p></div><div className="min-w-[78px] border-l border-slate-100 bg-red-50/50 px-3 py-2 text-center"><p className="text-[9px] font-bold uppercase tracking-wide text-red-500">Cancelled</p><p className="mt-0.5 text-lg font-black text-red-500">{summary.cancelled_parcel??0}</p></div></div>}</div>}
             </div>}
