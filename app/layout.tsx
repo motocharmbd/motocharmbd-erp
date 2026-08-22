@@ -1,9 +1,8 @@
-import "./globals.css";
-import SakinCommissionDisplay from "./components/SakinCommissionDisplay";
+import './globals.css';
 
 export const metadata = {
-  title: "Moto Charm BD ",
-  description: "Business Management System",
+  title: 'Moto Charm BD ERP',
+  description: 'Pathao Order Management System',
 };
 
 export default function RootLayout({
@@ -12,11 +11,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>
-        {children}
-        <SakinCommissionDisplay />
-      </body>
+    <html lang="bn">
+      <body>{children}</body>
     </html>
   );
 }
