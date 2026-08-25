@@ -1,5 +1,11 @@
 import SakinCommissionDisplay from "@/app/components/SakinCommissionDisplay";
 
+const courierApis = [
+  "Steadfast",
+  "Pathao",
+  "CarryBee",
+];
+
 export default function DashboardLayout({
   children,
 }: {
@@ -33,7 +39,27 @@ export default function DashboardLayout({
             🛡️ Fraud Check
           </a>
 
-          <a href="/settings" className="block hover:text-blue-400">
+          <div className="mt-5 pt-4 border-t border-gray-700">
+            <div className="text-[11px] uppercase tracking-wider text-gray-400 mb-3">
+              Courier APIs
+            </div>
+            <div className="space-y-2">
+              {courierApis.map((courier) => (
+                <div
+                  key={courier}
+                  className="flex items-center justify-between rounded-lg bg-gray-800 px-3 py-2"
+                >
+                  <span className="text-sm text-gray-200">{courier}</span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                    API
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <a href="/settings" className="block hover:text-blue-400 pt-1">
             ⚙️ Settings
           </a>
         </nav>
