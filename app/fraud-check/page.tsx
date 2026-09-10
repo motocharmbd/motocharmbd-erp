@@ -8,6 +8,12 @@ export default function FraudCheckPage() {
   const [loading, setLoading] = useState(false);
   const [searchResult, setSearchResult] = useState<any>(null);
 
+  // -----------------------------------------------------------------
+  // এখানে আপনার ইচ্ছামতো ৩টি কুরিয়ারের Key ম্যানুয়ালি বসিয়ে দিন।
+  // যেমন: Steadfast, RedX, Pathao হলে ব্যাকএন্ডের কী (key) অনুযায়ী লিখবেন।
+  // -----------------------------------------------------------------
+  const allowedCouriers = ['steadfast', 'redx', 'pathao']; 
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!phoneNumber) return;
@@ -34,7 +40,12 @@ export default function FraudCheckPage() {
   const responseData = searchResult?.data || searchResult;
   const courierData = responseData?.data || responseData;
   const summary = courierData?.summary;
-  const couriersList = courierData ? Object.entries(courierData).filter(([key]) => key !== 'summary' && key !== 'reports' && key !== 'status' && key !== 'data') : [];
+  
+  // এখানে শুধু আপনার ম্যানুয়ালি দেওয়া ৩টি কুরিয়ারই API থেকে ফিল্টার হয়ে আসবে
+  const couriersList = courierData 
+    ? Object.entries(courierData).filter(([key]) => allowedCouriers.includes(key)) 
+    : [];
+    
   const reports = searchResult?.reports || responseData?.reports || searchResult?.data?.reports || [];
 
   return (
