@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -13,25 +14,117 @@ type Bucket = "success" | "cancel" | "pending" | "unknown";
 type Stats = { name:string; success:number; cancel:number; pending:number; total:number; success_ratio:number; configured:boolean; source:string; error?:string };
 
 function normalizePhone(v:unknown){const r=String(v??"").replace(/\D/g,"");if(/^8801[3-9]\d{8}$/.test(r))return `0${r.slice(3)}`;return r;}
-function bucket(v:unknown):Bucket{const s=String(v||"").toLowerCase().replace(/[ _-]+/g,"");if(["delivered","partialdelivered","deliveredapprovalpending","partialdeliveredapprovalpending","paid","completed","success","orderdelivered","orderpartialdelivery"].includes(s))return"success";if(["cancelled","canceled","cancelledapprovalpending","returned","returnedtomerchant","deliveryfailed","orderreturned","orderdeliveryfailed","paidreturn","failed","rejected"].includes(s))return"cancel";if(s)return"pending";return"unknown";}
+function bucket(v:unknown):Bucket{const s=String(v||"").toLowerCase().replace(/[ _-]+/g,"");if(["delivered","partialdelivered","deliveredapprovalpending","partialdeliveredapprovalpending","paid","completed","success"].includes(s))return"success";if(["cancelled","cancel","rejected","decline"].includes(s))return"cancel";if(["pending","processing","awaiting","hold"].includes(s))return"pending";return"unknown";}
 function makeStats(name:string,configured:boolean,source:string):Stats{return{name,success:0,cancel:0,pending:0,total:0,success_ratio:0,configured,source};}
-function withTimeout<T>(promise:Promise<T>,ms=REQUEST_TIMEOUT_MS):Promise<T>{return Promise.race([promise,new Promise<T>((_,reject)=>setTimeout(()=>reject(new Error("Courier API timeout")),ms))]);}
+function withTimeout<T>(promise:Promise<T>,ms=REQUEST_TIMEOUT_MS):Promise<T>{return Promise.race([promise,new Promise<T>((_,reject)=>setTimeout(()=>reject(new Error("Courier API timeout")),ms))]);
+}
 
-async function getPathaoToken(){const clientId=process.env.PATHAO_CLIENT_ID,clientSecret=process.env.PATHAO_CLIENT_SECRET,refreshToken=process.env.PATHAO_REFRESH_TOKEN,username=process.env.PATHAO_USERNAME,password=process.env.PATHAO_PASSWORD;if(!clientId||!clientSecret||(!refreshToken&&(!username||!password)))return null;const body=refreshToken?{client_id:clientId,client_secret:clientSecret,grant_type:"refresh_token",refresh_token:refreshToken}:{client_id:clientId,client_secret:clientSecret,grant_type:"password",username,password};const r=await withTimeout(fetch(`${PATHAO_BASE_URL}/aladdin/api/v1/issue-token`,{method:"POST",headers:{accept:"application/json","content-type":"application/json"},body:JSON.stringify(body),cache:"no-store"}));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(`Pathao authentication failed (${r.status})`);return d?.access_token||d?.data?.access_token||null;}
-async function checkPathao(code:string,token:string|null):Promise<Bucket>{if(!token)return"unknown";const r=await withTimeout(fetch(`${PATHAO_BASE_URL}/aladdin/api/v1/orders/${encodeURIComponent(code)}/info`,{headers:{accept:"application/json",Authorization:`Bearer ${token}`},cache:"no-store"}));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(`Pathao tracking lookup failed (${r.status})`);return bucket(d?.data?.order_status_slug||d?.data?.order_status||d?.data?.status||d?.order_status_slug||d?.order_status||d?.status);}
-async function checkSteadfast(code:string):Promise<Bucket>{const key=process.env.STEADFAST_API_KEY,secret=process.env.STEADFAST_SECRET_KEY;if(!key||!secret)return"unknown";const r=await withTimeout(fetch(`${STEADFAST_BASE_URL}/status_by_trackingcode/${encodeURIComponent(code)}`,{headers:{"Api-Key":key,"Secret-Key":secret,"Content-Type":"application/json",Accept:"application/json"},cache:"no-store"}));const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(`Steadfast tracking lookup failed (${r.status})`);return bucket(d?.delivery_status||d?.status||d?.consignment?.delivery_status||d?.consignment?.status||d?.data?.delivery_status||d?.data?.status);}
-async function checkCarryBee(code:string):Promise<Bucket>{const id=process.env.CARRYBEE_CLIENT_ID||process.env.CARRYBEE_API_KEY,secret=process.env.CARRYBEE_CLIENT_SECRET||process.env.CARRYBEE_API_SECRET,context=process.env.CARRYBEE_CLIENT_CONTEXT||process.env.CARRYBEE_API_CONTEXT;if(!id||!secret||!context)return"unknown";const headers={"Content-Type":"application/json","Client-ID":id,"Client-Secret":secret,"Client-Context":context,Accept:"application/json"};let r=await withTimeout(fetch(`${CARRYBEE_BASE_URL}/api/v2/orders/${encodeURIComponent(code)}/details`,{headers,cache:"no-store"}));let d=await r.json().catch(()=>({}));if(!r.ok){r=await withTimeout(fetch(`${CARRYBEE_BASE_URL}/api/v2/orders/${encodeURIComponent(code)}`,{headers,cache:"no-store"}));d=await r.json().catch(()=>({}));}if(!r.ok)throw new Error(`CarryBee tracking lookup failed (${r.status})`);return bucket(d?.data?.status||d?.data?.current_status||d?.data?.order_status||d?.status||d?.order?.status||d?.current_status);}
+async function getPathaoToken(){const clientId=process.env.PATHAO_CLIENT_ID,clientSecret=process.env.PATHAO_CLIENT_SECRET,refreshToken=process.env.PATHAO_REFRESH_TOKEN,username=process.env.PATHAO_PASSWORD;if(!clientId||!clientSecret||!refreshToken)return null;try{const r=await withTimeout(fetch(`${PATHAO_BASE_URL}/aladdin/api/v1/issue-token`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_id:clientId,client_secret:clientSecret,username,password:process.env.PATHAO_PASSWORD,grant_type:"password"})}));if(!r.ok)return null;const j=await r.json();return j?.access_token||null;}catch{return null;}}
+async function checkPathao(code:string,token:string|null):Promise<Bucket>{if(!token)return"unknown";const r=await withTimeout(fetch(`${PATHAO_BASE_URL}/aladdin/api/v1/orders/${encodeURIComponent(code)}`,{headers:{"Authorization":`Bearer ${token}`}}));if(!r.ok)return"unknown";const j=await r.json();return bucket(j?.data?.status);}
+async function checkSteadfast(code:string):Promise<Bucket>{const key=process.env.STEADFAST_API_KEY,secret=process.env.STEADFAST_SECRET_KEY;if(!key||!secret)return"unknown";const r=await withTimeout(fetch(`${STEADFAST_BASE_URL}/status_by_code/${encodeURIComponent(code)}?api_key=${key}&secret_key=${secret}`));if(!r.ok)return"unknown";const j=await r.json();return bucket(j?.status);}
+async function checkCarryBee(code:string):Promise<Bucket>{const id=process.env.CARRYBEE_CLIENT_ID||process.env.CARRYBEE_API_KEY,secret=process.env.CARRYBEE_CLIENT_SECRET||process.env.CARRYBEE_API_SECRET;if(!id||!secret)return"unknown";const h=crypto.createHmac("sha256",secret).update(code).digest("hex");const r=await withTimeout(fetch(`${CARRYBEE_BASE_URL}/api/shipments/${encodeURIComponent(code)}`,{headers:{"X-Client-Id":id,"X-Signature":h}}));if(!r.ok)return"unknown";const j=await r.json();return bucket(j?.status);}
 function courierForCode(code:string){const v=String(code||"").trim();if(/^SFR/i.test(v))return"Steadfast";if(/^F[0-9A-Z]/i.test(v))return"CarryBee";if(v)return"Pathao";return null;}
 function apply(item:Stats,result:Bucket){if(result==="success")item.success++;else if(result==="cancel")item.cancel++;else if(result==="pending")item.pending++;}
 
-export async function POST(request:Request){try{const body=await request.json();const phone=normalizePhone(body?.phoneNumber??body?.phone);if(!/^01[3-9]\d{8}$/.test(phone))return NextResponse.json({error:"Valid 11-digit Bangladeshi phone number is required."},{status:400});
-const {data:orders,error}=await db.from("orders").select("id,phone,status,tracking_code,order_date,total_amount").eq("phone",phone).order("id",{ascending:false}).limit(100);if(error)throw error;
-const stats:Record<string,Stats>={Steadfast:makeStats("Steadfast",Boolean(process.env.STEADFAST_API_KEY&&process.env.STEADFAST_SECRET_KEY),"steadfast_api"),Pathao:makeStats("Pathao",Boolean(process.env.PATHAO_CLIENT_ID&&process.env.PATHAO_CLIENT_SECRET&&process.env.PATHAO_REFRESH_TOKEN),"pathao_api"),CarryBee:makeStats("CarryBee",Boolean((process.env.CARRYBEE_CLIENT_ID||process.env.CARRYBEE_API_KEY)&&(process.env.CARRYBEE_CLIENT_SECRET||process.env.CARRYBEE_API_SECRET)),"carrybee_api")};
-const tracked=(orders||[]).map(o=>({order:o,code:String(o.tracking_code||"").trim(),courier:courierForCode(o.tracking_code||"")})).filter(x=>x.code&&x.courier).slice(0,30);
-let pathaoToken:string|null=null;if(tracked.some(x=>x.courier==="Pathao")){try{pathaoToken=await getPathaoToken();}catch(e:any){stats.Pathao.error=e?.message||"Pathao authentication failed";}}
-const results=await Promise.all(tracked.map(async ({order,code,courier})=>{const item=stats[courier];if(!item)return null;try{const result=courier==="Steadfast"?await checkSteadfast(code):courier==="Pathao"?await checkPathao(code,pathaoToken):await checkCarryBee(code);return{courier,result,order};}catch(e:any){item.error=item.error||e?.message||`${courier} lookup failed`;return{courier,result:bucket(order.status),order};}}));
-for(const row of results){if(!row)continue;apply(stats[row.courier],row.result);}
-for(const order of (orders||[]).filter(o=>!String(o.tracking_code||"").trim())){const local="Moto Charm BD";if(!stats[local])stats[local]=makeStats(local,true,"erp_history");apply(stats[local],bucket(order.status));}
-for(const item of Object.values(stats)){item.total=item.success+item.cancel+item.pending;item.success_ratio=item.success+item.cancel?Number(((item.success/(item.success+item.cancel))*100).toFixed(2)):0;}
-const totalOrders=Object.values(stats).reduce((s,x)=>s+x.total,0),totalDelivered=Object.values(stats).reduce((s,x)=>s+x.success,0),totalCancelled=Object.values(stats).reduce((s,x)=>s+x.cancel,0),score=totalDelivered+totalCancelled?Math.round((totalDelivered/(totalDelivered+totalCancelled))*100):0;
-return NextResponse.json({success:true,source:"motocharmbd_erp_direct_courier_apis",third_party_fallback:false,phone,score,data:{summary:{total_parcel:totalOrders,success_parcel:totalDelivered,cancelled_parcel:totalCancelled,success_ratio:score},Steadfast:stats.Steadfast,Pathao:stats.Pathao,CarryBee:stats.CarryBee,...(stats["Moto Charm BD"]?{"Moto Charm BD":stats["Moto Charm BD"]}:{}),local_erp_orders:(orders||[]).length},reports:[]},{headers:{"Cache-Control":"no-store"}});}catch(error:any){console.error("Own courier fraud check error:",error);return NextResponse.json({success:false,error:error?.message||"Fraud check failed.",score:0},{status:500,headers:{"Cache-Control":"no-store"}});}}
+// New: Check Steadfast for phone number fraud history
+async function checkSteadfastPhoneFraud(phone:string):Promise<{success:boolean;data?:any;error?:string}>{
+  const key=process.env.STEADFAST_API_KEY,secret=process.env.STEADFAST_SECRET_KEY;
+  if(!key||!secret)return{success:false,error:"Steadfast API not configured"};
+  
+  try{
+    const r=await withTimeout(fetch(`${STEADFAST_BASE_URL}/get_balance?api_key=${key}&secret_key=${secret}`));
+    if(!r.ok)throw new Error("Steadfast authentication failed");
+    
+    // Since Steadfast API doesn't have direct phone lookup, we'll use the orders approach
+    // This is a placeholder for when API endpoint becomes available
+    return{success:true,data:{source:"steadfast_api"}};
+  }catch(e:any){
+    return{success:false,error:e?.message};
+  }
+}
+
+export async function POST(request:Request){
+  try{
+    const body=await request.json();
+    const phone=normalizePhone(body?.phoneNumber??body?.phone);
+    
+    if(!/^01[3-9]\d{8}$/.test(phone))
+      return NextResponse.json({success:false,error:"Invalid phone number format"},{ status:400});
+    
+    // First try to get orders from Supabase
+    const {data:orders,error}=await db.from("orders").select("id,phone,status,tracking_code,order_date,total_amount,qty").eq("phone",phone).order("id",{ascending:false}).limit(100);
+    
+    if(error)throw error;
+    
+    const stats:Record<string,Stats>={
+      Steadfast:makeStats("Steadfast",Boolean(process.env.STEADFAST_API_KEY&&process.env.STEADFAST_SECRET_KEY),"steadfast_api"),
+      Pathao:makeStats("Pathao",Boolean(process.env.PATHAO_CLIENT_ID&&process.env.PATHAO_CLIENT_SECRET),"pathao_api"),
+      CarryBee:makeStats("CarryBee",Boolean(process.env.CARRYBEE_CLIENT_ID||process.env.CARRYBEE_API_KEY),"carrybee_api")
+    };
+    
+    const tracked=(orders||[]).map(o=>({order:o,code:String(o.tracking_code||"").trim(),courier:courierForCode(o.tracking_code||"")})).filter(x=>x.code&&x.courier).slice(0,30);
+    
+    let pathaoToken:string|null=null;
+    if(tracked.some(x=>x.courier==="Pathao")){
+      try{pathaoToken=await getPathaoToken();}catch(e:any){stats.Pathao.error=e?.message||"Pathao authentication failed";}
+    }
+    
+    const results=await Promise.all(tracked.map(async ({order,code,courier})=>{
+      const item=stats[courier];
+      if(!item)return null;
+      try{
+        const result=courier==="Steadfast"?await checkSteadfast(code):courier==="Pathao"?await checkPathao(code,pathaoToken):await checkCarryBee(code);
+        return{order,code,courier,result};
+      }catch(e:any){
+        item.error=e?.message;
+        return null;
+      }
+    }));
+    
+    for(const row of results){
+      if(!row)continue;
+      apply(stats[row.courier],row.result);
+    }
+    
+    // Handle orders without tracking codes
+    for(const order of (orders||[]).filter(o=>!String(o.tracking_code||"").trim())){
+      const local="Moto Charm BD";
+      if(!stats[local])stats[local]=makeStats(local,true,"erp_history");
+      apply(stats[local],bucket(order.status));
+    }
+    
+    // Calculate success ratios
+    for(const item of Object.values(stats)){
+      item.total=item.success+item.cancel+item.pending;
+      item.success_ratio=item.success+item.cancel?Number(((item.success/(item.success+item.cancel))*100).toFixed(2)):0;
+    }
+    
+    const totalOrders=Object.values(stats).reduce((s,x)=>s+x.total,0);
+    const totalDelivered=Object.values(stats).reduce((s,x)=>s+x.success,0);
+    const totalCancelled=Object.values(stats).reduce((s,x)=>s+x.cancel,0);
+    const score=totalOrders===0?0:Number(((totalDelivered/(totalDelivered+totalCancelled))*100).toFixed(2))||0;
+    
+    return NextResponse.json({
+      success:true,
+      source:"motocharmbd_erp_direct_courier_apis",
+      third_party_fallback:false,
+      phone,
+      score,
+      data:{
+        summary:{
+          total_parcel:totalOrders,
+          success_parcel:totalDelivered,
+          cancelled_parcel:totalCancelled,
+          success_ratio:score
+        },
+        ...Object.fromEntries(Object.entries(stats).map(([k,v])=>[k.toLowerCase(),v]))
+      }
+    });
+  }catch(e:any){
+    console.error("Fraud check error:",e);
+    return NextResponse.json({
+      success:false,
+      error:e?.message||"Internal server error"
+    },{ status:500});
+  }
+}
